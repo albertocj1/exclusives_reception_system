@@ -25,103 +25,89 @@
     .tab-btn.active-tab { background:#F5C518; color:#0A1A24; }
     input[type=number]::-webkit-inner-spin-button,
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-    html, body { -webkit-text-size-adjust: 100%; }
   </style>
 
   <!-- ==========================================================
        CONFIG — fill these three in with YOUR values
        ========================================================== -->
-       <script>
-        window.SUPABASE_URL     = "https://gvtutnofyrkmyyclfshe.supabase.co";   // <-- your Project URL
-        window.SUPABASE_ANON_KEY = "sb_publishable_rapJHCk_P68ZgPDnqEPY7w_GfAv2ag4";              // <-- your anon/public key (safe in frontend)
-        window.API_BASE          = "https://exclusivesph.onrender.com"; // <-- your Render backend
-      </script>
+  <script>
+    window.SUPABASE_URL     = "https://gvtutnofyrkmyyclfshe.supabase.co";   // <-- your Project URL
+    window.SUPABASE_ANON_KEY = "sb_publishable_rapJHCk_P68ZgPDnqEPY7w_GfAv2ag4";              // <-- your anon/public key (safe in frontend)
+    window.API_BASE          = "https://exclusivesph.onrender.com"; // <-- your Render backend
+  </script>
 </head>
 <body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen">
 
   <!-- ================= LOGIN GATE ================= -->
   <div id="gate" class="min-h-screen flex items-center justify-center px-6">
-    <div class="w-full max-w-md bg-brand-slate border border-white/5 rounded-3xl p-10">
-      <div class="text-center mb-8">
-        <div class="font-mono text-xs tracking-[0.3em] text-brand-gold uppercase mb-2">Exclusives PH</div>
-        <h1 class="font-serif text-3xl text-brand-ice">Reception</h1>
+    <div class="w-full max-w-sm bg-brand-slate border border-white/5 rounded-3xl p-8">
+      <div class="text-center mb-6">
+        <div class="font-mono text-[11px] tracking-[0.3em] text-brand-gold uppercase mb-1">Exclusives PH</div>
+        <h1 class="font-serif text-2xl text-brand-ice">Reception</h1>
       </div>
-      <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Email</label>
+      <label class="block font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Email</label>
       <input id="email" type="email" autocomplete="username" placeholder="reception@exclusivesph.com"
-             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-base px-4 py-4 outline-none mb-5">
-      <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Password</label>
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm px-4 py-3 outline-none mb-4">
+      <label class="block font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Password</label>
       <input id="password" type="password" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
-             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-base px-4 py-4 outline-none mb-6">
-      <button id="login-btn" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Log in</button>
-      <p id="gate-error" class="text-red-400 text-sm font-mono mt-4 hidden"></p>
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm px-4 py-3 outline-none mb-5">
+      <button id="login-btn" class="w-full py-3 rounded-full bg-brand-gold text-brand-obsidian font-mono text-xs font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Log in</button>
+      <p id="gate-error" class="text-red-400 text-xs font-mono mt-3 hidden"></p>
     </div>
   </div>
 
   <!-- ================= APP ================= -->
-  <div id="app" class="hidden max-w-5xl mx-auto px-6 py-8">
+  <div id="app" class="hidden max-w-lg mx-auto px-4 py-6">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-5">
       <div>
-        <div class="font-mono text-[11px] tracking-[0.3em] text-brand-gold uppercase">Exclusives PH</div>
-        <h1 class="font-serif text-3xl md:text-4xl text-brand-ice leading-tight">Reception</h1>
+        <div class="font-mono text-[10px] tracking-[0.3em] text-brand-gold uppercase">Exclusives PH</div>
+        <h1 class="font-serif text-2xl text-brand-ice leading-tight">Reception</h1>
       </div>
-      <div class="flex items-center gap-3">
-        <div id="clock" class="hidden md:block font-mono text-sm text-brand-muted tabular-nums"></div>
-        <button id="logout-btn" class="font-mono text-[11px] tracking-widest uppercase text-brand-muted hover:text-brand-ice border border-white/10 rounded-full px-4 py-2 transition-colors">Log out</button>
-      </div>
+      <button id="logout-btn" class="font-mono text-[10px] tracking-widest uppercase text-brand-muted hover:text-brand-ice border border-white/10 rounded-full px-3 py-2 transition-colors">Log out</button>
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-3 mb-6 max-w-md">
-      <button data-tab="scan" class="tab-btn active-tab flex-1 font-mono text-xs tracking-widest uppercase rounded-full px-4 py-3 border border-brand-gold transition-colors">Scan</button>
-      <button data-tab="tables" class="tab-btn flex-1 font-mono text-xs tracking-widest uppercase rounded-full px-4 py-3 border border-white/10 text-brand-muted transition-colors">Tables</button>
+    <div class="flex gap-2 mb-5">
+      <button data-tab="scan" class="tab-btn active-tab flex-1 font-mono text-[11px] tracking-widest uppercase rounded-full px-4 py-3 border border-brand-gold transition-colors">Scan</button>
+      <button data-tab="tables" class="tab-btn flex-1 font-mono text-[11px] tracking-widest uppercase rounded-full px-4 py-3 border border-white/10 text-brand-muted transition-colors">Tables</button>
     </div>
 
-    <!-- ---------- SCAN TAB : two columns on iPad ---------- -->
-    <div id="tab-scan" class="grid md:grid-cols-2 gap-6 items-start">
-
-      <!-- LEFT: camera + manual entry -->
-      <div class="space-y-4">
-        <div class="bg-brand-slate border border-white/5 rounded-3xl p-5">
-          <div id="reader" class="w-full bg-brand-obsidian aspect-square flex items-center justify-center text-brand-muted text-sm font-mono">
-            Camera off
-          </div>
-          <div class="flex gap-3 mt-4">
-            <button id="cam-start" class="flex-1 font-mono text-xs tracking-widest uppercase rounded-full px-4 py-4 bg-brand-goldDim border border-brand-gold/40 text-brand-gold hover:bg-brand-gold hover:text-brand-obsidian transition-colors">Start camera</button>
-            <button id="cam-stop" class="hidden flex-1 font-mono text-xs tracking-widest uppercase rounded-full px-4 py-4 border border-white/10 text-brand-muted hover:text-brand-ice transition-colors">Stop</button>
-          </div>
+    <!-- ---------- SCAN TAB ---------- -->
+    <div id="tab-scan">
+      <div class="bg-brand-slate border border-white/5 rounded-3xl p-5 mb-4">
+        <div id="reader" class="w-full bg-brand-obsidian aspect-square flex items-center justify-center text-brand-muted text-xs font-mono">
+          Camera off
         </div>
-
-        <div class="bg-brand-slate border border-white/5 rounded-3xl p-5">
-          <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Or enter code manually</label>
-          <div class="flex gap-3">
-            <input id="manual-code" type="text" placeholder="EXC-XXXXXX" autocapitalize="characters"
-                   class="flex-1 bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice font-mono text-base px-4 py-4 outline-none uppercase">
-            <button id="manual-go" class="font-mono text-xs tracking-widest uppercase rounded-xl px-6 bg-brand-gold text-brand-obsidian font-bold hover:bg-brand-ice transition-colors">Go</button>
-          </div>
+        <div class="flex gap-2 mt-4">
+          <button id="cam-start" class="flex-1 font-mono text-[11px] tracking-widest uppercase rounded-full px-4 py-3 bg-brand-goldDim border border-brand-gold/40 text-brand-gold hover:bg-brand-gold hover:text-brand-obsidian transition-colors">Start camera</button>
+          <button id="cam-stop" class="hidden flex-1 font-mono text-[11px] tracking-widest uppercase rounded-full px-4 py-3 border border-white/10 text-brand-muted hover:text-brand-ice transition-colors">Stop</button>
         </div>
       </div>
 
-      <!-- RIGHT: result card -->
-      <div class="md:sticky md:top-8">
-        <div id="result-empty" class="bg-brand-slate/40 border border-dashed border-white/10 rounded-3xl p-10 text-center text-brand-muted">
-          <div class="font-serif text-xl text-brand-ice/70 mb-2">Ready to scan</div>
-          <div class="text-sm font-light">Scan a QR code or enter a ticket code to pull up a guest.</div>
+      <!-- Manual entry -->
+      <div class="bg-brand-slate border border-white/5 rounded-3xl p-5 mb-4">
+        <label class="block font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Or enter code manually</label>
+        <div class="flex gap-2">
+          <input id="manual-code" type="text" placeholder="EXC-XXXXXX" autocapitalize="characters"
+                 class="flex-1 bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice font-mono text-sm px-4 py-3 outline-none uppercase">
+          <button id="manual-go" class="font-mono text-[11px] tracking-widest uppercase rounded-xl px-5 bg-brand-gold text-brand-obsidian font-bold hover:bg-brand-ice transition-colors">Go</button>
         </div>
-        <div id="result" class="hidden border rounded-3xl p-6 bg-brand-slate"></div>
       </div>
 
+      <!-- Result card -->
+      <div id="result" class="hidden bg-brand-slate border rounded-3xl p-6"></div>
     </div>
 
     <!-- ---------- TABLES TAB ---------- -->
     <div id="tab-tables" class="hidden">
-      <div class="flex items-center justify-between mb-5">
-        <div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase">Live table board</div>
-        <button id="tables-refresh" class="font-mono text-[11px] tracking-widest uppercase text-brand-gold border border-brand-gold/40 rounded-full px-4 py-2 hover:bg-brand-goldDim transition-colors">Refresh</button>
+      <div class="flex items-center justify-between mb-4">
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase">Live table board</div>
+        <button id="tables-refresh" class="font-mono text-[10px] tracking-widest uppercase text-brand-gold border border-brand-gold/40 rounded-full px-3 py-2 hover:bg-brand-goldDim transition-colors">Refresh</button>
       </div>
-      <div id="tables-list" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-      <div id="tables-empty" class="hidden text-center text-brand-muted text-sm font-light py-12">No tables found.</div>
+      <div id="tables-list" class="space-y-3"></div>
+      <div id="tables-empty" class="hidden text-center text-brand-muted text-sm font-light py-10">No tables found.</div>
     </div>
 
   </div>
@@ -138,13 +124,7 @@
     var sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
     var $ = function (id) { return document.getElementById(id); };
-
-    // ---- Clock ----
-    function tickClock() {
-      var el = $('clock'); if (!el) return;
-      el.textContent = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
-    }
-    tickClock(); setInterval(tickClock, 10000);
+    var peso = function (n) { return '\u20B1' + Number(n || 0).toLocaleString('en-PH'); };
 
     // ---- Warm the backend early (Render cold start) ----
     if (API_BASE) { fetch(API_BASE + '/api/availability').catch(function(){}); }
@@ -227,7 +207,7 @@
       try {
         await html5Qr.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 260, height: 260 } },
+          { fps: 10, qrbox: { width: 240, height: 240 } },
           onScan,
           function () {}
         );
@@ -272,16 +252,11 @@
     });
 
     // ---------------- LOOKUP ----------------
-    function showResultBox() {
-      $('result-empty').classList.add('hidden');
-      $('result').classList.remove('hidden');
-    }
-
     async function lookup(code) {
       var box = $('result');
-      showResultBox();
-      box.className = 'border border-white/10 rounded-3xl p-6 bg-brand-slate';
-      box.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-6">Looking up ' + esc(code) + '\u2026</div>';
+      box.className = 'bg-brand-slate border border-white/10 rounded-3xl p-6';
+      box.classList.remove('hidden');
+      box.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-4">Looking up ' + esc(code) + '\u2026</div>';
       try {
         var headers = await authHeader();
         var res = await fetch(API_BASE + '/api/reception/lookup/' + encodeURIComponent(code.toUpperCase()), { headers: headers });
@@ -291,18 +266,18 @@
         var b = await res.json();
         renderResult(b);
       } catch (e) {
-        box.className = 'border border-red-400/40 rounded-3xl p-6 bg-brand-slate';
-        box.innerHTML = '<div class="text-center text-red-300 text-sm font-mono py-6">Could not reach the server. Try again.</div>';
+        box.className = 'bg-brand-slate border border-red-400/40 rounded-3xl p-6';
+        box.innerHTML = '<div class="text-center text-red-300 text-sm font-mono py-4">Could not reach the server. Try again.</div>';
       }
     }
 
     function renderNotFound(code) {
       var box = $('result');
-      box.className = 'border border-red-400/40 rounded-3xl p-8 bg-brand-slate text-center';
+      box.className = 'bg-brand-slate border border-red-400/40 rounded-3xl p-6 text-center';
       box.innerHTML =
-        '<div class="w-16 h-16 rounded-full border border-red-400 text-red-300 flex items-center justify-center text-3xl mx-auto mb-4">&times;</div>' +
-        '<div class="font-serif text-2xl text-brand-ice mb-1">Ticket not found</div>' +
-        '<div class="font-mono text-sm text-brand-muted">' + esc(code.toUpperCase()) + ' is not in the guestlist.</div>';
+        '<div class="w-14 h-14 rounded-full border border-red-400 text-red-300 flex items-center justify-center text-2xl mx-auto mb-3">&times;</div>' +
+        '<div class="font-serif text-xl text-brand-ice mb-1">Ticket not found</div>' +
+        '<div class="font-mono text-xs text-brand-muted">' + esc(code.toUpperCase()) + ' is not in the guestlist.</div>';
     }
 
     function renderResult(b) {
@@ -311,32 +286,33 @@
       var already = b.checked_in;
       var table = b.table_id || 'General Admission';
 
+      // border color: green ok, amber already-in, red not-confirmed
       var border = confirmed ? (already ? 'border-amber-400/50' : 'border-emerald-400/50') : 'border-red-400/50';
-      box.className = 'border ' + border + ' rounded-3xl p-6 md:p-7 bg-brand-slate';
+      box.className = 'bg-brand-slate border ' + border + ' rounded-3xl p-6';
 
       var statusBadge, banner = '';
       if (!confirmed) {
-        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-red-300 border border-red-400/40 rounded-full px-3 py-1">' + esc(b.status) + '</span>';
-        banner = '<div class="bg-red-400/10 border border-red-400/30 rounded-xl p-4 text-red-300 text-sm font-mono text-center mb-5">Not confirmed — do not admit. Refer to admin.</div>';
+        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-red-300 border border-red-400/40 rounded-full px-2 py-1">' + esc(b.status) + '</span>';
+        banner = '<div class="bg-red-400/10 border border-red-400/30 rounded-xl p-3 text-red-300 text-xs font-mono text-center mb-4">Not confirmed — do not admit. Refer to admin.</div>';
       } else if (already) {
-        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-amber-300 border border-amber-400/40 rounded-full px-3 py-1">Checked in</span>';
+        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-amber-300 border border-amber-400/40 rounded-full px-2 py-1">Checked in</span>';
         var t = b.checked_in_at ? new Date(b.checked_in_at).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'}) : '';
-        banner = '<div class="bg-amber-400/10 border border-amber-400/30 rounded-xl p-4 text-amber-300 text-sm font-mono text-center mb-5">Already checked in' + (t ? ' at ' + t : '') + '. You can update the head count below.</div>';
+        banner = '<div class="bg-amber-400/10 border border-amber-400/30 rounded-xl p-3 text-amber-300 text-xs font-mono text-center mb-4">Already checked in' + (t ? ' at ' + t : '') + '. You can update the head count below.</div>';
       } else {
-        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-emerald-300 border border-emerald-400/40 rounded-full px-3 py-1">Confirmed</span>';
+        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-emerald-300 border border-emerald-400/40 rounded-full px-2 py-1">Confirmed</span>';
       }
 
       var defaultHeads = (already && b.heads_present) ? b.heads_present : b.guests;
 
       box.innerHTML =
         banner +
-        '<div class="flex items-start justify-between mb-5">' +
+        '<div class="flex items-start justify-between mb-4">' +
           '<div>' +
-            '<div class="font-serif text-3xl text-brand-ice leading-tight">' + esc(b.full_name) + '</div>' +
-            '<div class="font-mono text-xs tracking-widest text-brand-gold uppercase mt-1">' + esc(b.ticket_code || '') + '</div>' +
+            '<div class="font-serif text-2xl text-brand-ice leading-tight">' + esc(b.full_name) + '</div>' +
+            '<div class="font-mono text-[11px] tracking-widest text-brand-gold uppercase mt-1">' + esc(b.ticket_code || '') + '</div>' +
           '</div>' + statusBadge +
         '</div>' +
-        '<div class="grid grid-cols-2 gap-3 font-mono text-sm mb-6">' +
+        '<div class="grid grid-cols-2 gap-3 font-mono text-xs mb-5">' +
           detail('Package', b.package) +
           detail('Table / Spot', table) +
           detail('Booked pax', String(b.guests)) +
@@ -345,14 +321,14 @@
 
       if (confirmed) {
         box.innerHTML +=
-          '<div class="border-t border-white/10 pt-6">' +
-            '<div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-4 text-center">Heads present at this table</div>' +
-            '<div class="flex items-center justify-center gap-6 mb-6">' +
-              '<button id="heads-minus" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">&minus;</button>' +
-              '<input id="heads-val" type="number" value="' + defaultHeads + '" min="0" max="' + b.guests + '" class="w-20 bg-transparent text-center font-serif text-5xl text-brand-gold outline-none">' +
-              '<button id="heads-plus" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">+</button>' +
+          '<div class="border-t border-white/10 pt-5">' +
+            '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-3 text-center">Heads present at this table</div>' +
+            '<div class="flex items-center justify-center gap-5 mb-5">' +
+              '<button id="heads-minus" class="w-12 h-12 rounded-full border border-white/15 text-brand-ice text-2xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">&minus;</button>' +
+              '<input id="heads-val" type="number" value="' + defaultHeads + '" min="0" max="' + b.guests + '" class="w-16 bg-transparent text-center font-serif text-4xl text-brand-gold outline-none">' +
+              '<button id="heads-plus" class="w-12 h-12 rounded-full border border-white/15 text-brand-ice text-2xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">+</button>' +
             '</div>' +
-            '<button id="checkin-btn" data-id="' + esc(b.id) + '" class="w-full py-5 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">' +
+            '<button id="checkin-btn" data-id="' + esc(b.id) + '" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-xs font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">' +
               (already ? 'Update head count' : 'Check in guest') +
             '</button>' +
           '</div>';
@@ -388,15 +364,14 @@
         if (!res.ok) throw new Error((data && data.detail) || 'Check-in failed.');
 
         var box = $('result');
-        box.className = 'border border-emerald-400/60 rounded-3xl p-8 bg-brand-slate text-center';
+        box.className = 'bg-brand-slate border border-emerald-400/60 rounded-3xl p-6 text-center';
         box.innerHTML =
-          '<div class="w-20 h-20 rounded-full border border-emerald-400 text-emerald-300 flex items-center justify-center text-4xl mx-auto mb-5">&check;</div>' +
-          '<div class="font-serif text-3xl text-brand-ice mb-1">' + esc(data.full_name) + '</div>' +
-          '<div class="font-mono text-sm text-brand-muted mb-6">' + (data.table_id ? esc(data.table_id) + ' &middot; ' : '') + esc(String(data.heads_present)) + ' seated</div>' +
-          '<button id="scan-again" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Scan next guest</button>';
+          '<div class="w-16 h-16 rounded-full border border-emerald-400 text-emerald-300 flex items-center justify-center text-3xl mx-auto mb-4">&check;</div>' +
+          '<div class="font-serif text-2xl text-brand-ice mb-1">' + esc(data.full_name) + '</div>' +
+          '<div class="font-mono text-xs text-brand-muted mb-4">' + (data.table_id ? esc(data.table_id) + ' &middot; ' : '') + esc(String(data.heads_present)) + ' seated</div>' +
+          '<button id="scan-again" class="w-full py-3 rounded-full bg-brand-gold text-brand-obsidian font-mono text-xs font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Scan next guest</button>';
         $('scan-again').addEventListener('click', function () {
           $('result').classList.add('hidden');
-          $('result-empty').classList.remove('hidden');
           $('manual-code').value = '';
         });
         loadTables();
@@ -426,28 +401,28 @@
           var accent = occupied ? 'border-emerald-400/40' : 'border-white/10';
           var who = (t.reserved_by && t.reserved_by.length) ? t.reserved_by.map(esc).join(', ') : 'Unreserved';
           return '' +
-            '<div class="bg-brand-slate border ' + accent + ' rounded-2xl p-5 flex items-center justify-between">' +
-              '<div class="pr-3">' +
-                '<div class="font-serif text-xl text-brand-ice">' + esc(t.id) + '</div>' +
+            '<div class="bg-brand-slate border ' + accent + ' rounded-2xl p-4 flex items-center justify-between">' +
+              '<div>' +
+                '<div class="font-serif text-lg text-brand-ice">' + esc(t.id) + '</div>' +
                 '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">' + esc(t.package || '') + '</div>' +
                 '<div class="text-xs text-brand-muted font-light mt-1">' + who + '</div>' +
               '</div>' +
-              '<div class="text-right shrink-0">' +
-                '<div class="font-serif text-3xl ' + (occupied ? 'text-emerald-300' : 'text-brand-muted') + '">' + seated + '</div>' +
+              '<div class="text-right">' +
+                '<div class="font-serif text-2xl ' + (occupied ? 'text-emerald-300' : 'text-brand-muted') + '">' + seated + '</div>' +
                 '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase">of ' + booked + ' booked</div>' +
               '</div>' +
             '</div>';
         }).join('');
       } catch (e) {
-        list.innerHTML = '<div class="col-span-full text-center text-brand-muted text-sm font-mono py-8">Could not load tables.</div>';
+        list.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-6">Could not load tables.</div>';
       }
     }
     $('tables-refresh').addEventListener('click', loadTables);
 
     // ---------------- utils ----------------
     function detail(label, value) {
-      return '<div class="bg-brand-obsidian/40 border border-white/5 rounded-xl p-4">' +
-        '<div class="text-brand-muted uppercase tracking-widest text-[10px] mb-1">' + label + '</div>' +
+      return '<div class="bg-brand-obsidian/40 border border-white/5 rounded-xl p-3">' +
+        '<div class="text-brand-muted uppercase tracking-widest text-[9px] mb-1">' + label + '</div>' +
         '<div class="text-brand-ice">' + esc(value == null ? '\u2014' : value) + '</div></div>';
     }
     function esc(s) {
