@@ -31,11 +31,11 @@
   <!-- ==========================================================
        CONFIG — fill these three in with YOUR values
        ========================================================== -->
-       <script>
-        window.SUPABASE_URL     = "https://gvtutnofyrkmyyclfshe.supabase.co";   // <-- your Project URL
-        window.SUPABASE_ANON_KEY = "sb_publishable_rapJHCk_P68ZgPDnqEPY7w_GfAv2ag4";              // <-- your anon/public key (safe in frontend)
-        window.API_BASE          = "https://exclusivesph.onrender.com"; // <-- your Render backend
-      </script>
+  <script>
+    window.SUPABASE_URL      = "https://YOUR-PROJECT.supabase.co";   // <-- your Project URL
+    window.SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";               // <-- your anon/public key (safe in frontend)
+    window.API_BASE          = "https://exclusivesph.onrender.com";  // <-- your Render backend
+  </script>
 </head>
 <body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen">
 
@@ -76,6 +76,26 @@
     <div class="flex gap-3 mb-6 max-w-md">
       <button data-tab="scan" class="tab-btn active-tab flex-1 font-mono text-xs tracking-widest uppercase rounded-full px-4 py-3 border border-brand-gold transition-colors">Scan</button>
       <button data-tab="tables" class="tab-btn flex-1 font-mono text-xs tracking-widest uppercase rounded-full px-4 py-3 border border-white/10 text-brand-muted transition-colors">Tables</button>
+    </div>
+
+    <!-- ---------- LIVE DOOR SUMMARY ---------- -->
+    <div id="summary-bar" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div class="bg-brand-slate border border-brand-gold/30 rounded-2xl p-4 text-center">
+        <div id="sum-present" class="font-serif text-4xl text-brand-gold tabular-nums">0</div>
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Guests inside</div>
+      </div>
+      <div class="bg-brand-slate border border-white/5 rounded-2xl p-4 text-center">
+        <div id="sum-expected" class="font-serif text-4xl text-brand-ice tabular-nums">0</div>
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Expected</div>
+      </div>
+      <div class="bg-brand-slate border border-white/5 rounded-2xl p-4 text-center">
+        <div id="sum-checked" class="font-serif text-4xl text-emerald-300 tabular-nums">0</div>
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Bookings in</div>
+      </div>
+      <div class="bg-brand-slate border border-white/5 rounded-2xl p-4 text-center">
+        <div id="sum-pending" class="font-serif text-4xl text-brand-muted tabular-nums">0</div>
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Not yet arrived</div>
+      </div>
     </div>
 
     <!-- ---------- SCAN TAB : two columns on iPad ---------- -->
@@ -174,6 +194,7 @@
         } else {
           showApp();
           loadTables();
+          loadSummary();
         }
       } catch (e) {
         err.textContent = 'Could not reach the auth server.';
@@ -193,7 +214,7 @@
 
     // Restore session on reload
     sb.auth.getSession().then(function (s) {
-      if (s && s.data && s.data.session) { showApp(); loadTables(); }
+      if (s && s.data && s.data.session) { showApp(); loadTables(); loadSummary(); }
       else { showGate(); }
     });
 
@@ -210,7 +231,7 @@
         });
         $('tab-scan').classList.toggle('hidden', tab !== 'scan');
         $('tab-tables').classList.toggle('hidden', tab !== 'tables');
-        if (tab === 'tables') loadTables();
+        if (tab === 'tables') { loadTables(); loadSummary(); }
         if (tab !== 'scan') stopCamera();
       });
     });
@@ -400,10 +421,25 @@
           $('manual-code').value = '';
         });
         loadTables();
+        loadSummary();
       } catch (e) {
         btn.disabled = false; btn.textContent = 'Check in guest';
         alert(e.message);
       }
+    }
+
+    // ---------------- DOOR SUMMARY ----------------
+    async function loadSummary() {
+      try {
+        var headers = await authHeader();
+        var res = await fetch(API_BASE + '/api/reception/summary', { headers: headers });
+        if (res.status === 401) { showGate(); return; }
+        var s = await res.json();
+        $('sum-present').textContent  = s.present_heads || 0;
+        $('sum-expected').textContent = s.expected_heads || 0;
+        $('sum-checked').textContent  = s.checked_in_bookings || 0;
+        $('sum-pending').textContent  = s.pending_bookings || 0;
+      } catch (e) { /* leave last known values */ }
     }
 
     // ---------------- TABLE BOARD ----------------
@@ -442,7 +478,7 @@
         list.innerHTML = '<div class="col-span-full text-center text-brand-muted text-sm font-mono py-8">Could not load tables.</div>';
       }
     }
-    $('tables-refresh').addEventListener('click', loadTables);
+    $('tables-refresh').addEventListener('click', function(){ loadTables(); loadSummary(); });
 
     // ---------------- utils ----------------
     function detail(label, value) {
