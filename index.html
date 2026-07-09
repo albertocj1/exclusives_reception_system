@@ -91,14 +91,22 @@
       <div class="bg-brand-slate border border-white/5 rounded-2xl p-4 text-center">
         <div id="sum-expected" class="font-serif text-4xl text-brand-ice tabular-nums">0</div>
         <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Expected</div>
+        <div class="mt-2 pt-2 border-t border-white/5 flex justify-center gap-3 font-mono text-[10px] tracking-wider">
+          <span class="text-brand-ice"><span id="sum-exp-couch" class="text-brand-ice font-bold">0</span> <span class="text-brand-muted">couch</span></span>
+          <span class="text-brand-ice"><span id="sum-exp-entrance" class="text-brand-ice font-bold">0</span> <span class="text-brand-muted">entrance</span></span>
+        </div>
       </div>
       <div class="bg-brand-slate border border-white/5 rounded-2xl p-4 text-center">
         <div id="sum-checked" class="font-serif text-4xl text-emerald-300 tabular-nums">0</div>
         <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Bookings in</div>
       </div>
       <div class="bg-brand-slate border border-white/5 rounded-2xl p-4 text-center">
-        <div id="sum-pending" class="font-serif text-4xl text-brand-muted tabular-nums">0</div>
+        <div id="sum-coming" class="font-serif text-4xl text-brand-ice tabular-nums">0</div>
         <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Not yet arrived</div>
+        <div class="mt-2 pt-2 border-t border-white/5 flex justify-center gap-3 font-mono text-[10px] tracking-wider">
+          <span class="text-brand-ice"><span id="sum-coming-couch" class="text-brand-ice font-bold">0</span> <span class="text-brand-muted">couch</span></span>
+          <span class="text-brand-ice"><span id="sum-coming-entrance" class="text-brand-ice font-bold">0</span> <span class="text-brand-muted">entrance</span></span>
+        </div>
       </div>
     </div>
 
@@ -514,9 +522,13 @@
         $('sum-present').textContent  = s.present_heads || 0;
         $('sum-expected').textContent = s.expected_heads || 0;
         $('sum-checked').textContent  = s.checked_in_bookings || 0;
-        $('sum-pending').textContent  = s.pending_bookings || 0;
+        var comingEl = $('sum-coming'); if (comingEl) comingEl.textContent = s.coming_heads || 0;
         var cEl = $('sum-couch'); if (cEl) cEl.textContent = s.present_couch || 0;
         var eEl = $('sum-entrance'); if (eEl) eEl.textContent = s.present_entrance || 0;
+        var ccEl = $('sum-coming-couch'); if (ccEl) ccEl.textContent = s.coming_couch || 0;
+        var ceEl = $('sum-coming-entrance'); if (ceEl) ceEl.textContent = s.coming_entrance || 0;
+        var xcEl = $('sum-exp-couch'); if (xcEl) xcEl.textContent = s.expected_couch || 0;
+        var xeEl = $('sum-exp-entrance'); if (xeEl) xeEl.textContent = s.expected_entrance || 0;
       } catch (e) { /* leave last known values */ }
     }
 
