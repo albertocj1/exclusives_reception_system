@@ -83,6 +83,10 @@
       <div class="bg-brand-slate border border-brand-gold/30 rounded-2xl p-4 text-center">
         <div id="sum-present" class="font-serif text-4xl text-brand-gold tabular-nums">0</div>
         <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">Guests inside</div>
+        <div class="mt-2 pt-2 border-t border-white/5 flex justify-center gap-3 font-mono text-[10px] tracking-wider">
+          <span class="text-brand-ice"><span id="sum-couch" class="text-brand-gold font-bold">0</span> <span class="text-brand-muted">couch</span></span>
+          <span class="text-brand-ice"><span id="sum-entrance" class="text-brand-gold font-bold">0</span> <span class="text-brand-muted">entrance</span></span>
+        </div>
       </div>
       <div class="bg-brand-slate border border-white/5 rounded-2xl p-4 text-center">
         <div id="sum-expected" class="font-serif text-4xl text-brand-ice tabular-nums">0</div>
@@ -136,14 +140,71 @@
 
     <!-- ---------- TABLES TAB ---------- -->
     <div id="tab-tables" class="hidden">
-      <div class="flex items-center justify-between mb-5">
+      <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase">Live table board</div>
-        <button id="tables-refresh" class="font-mono text-[11px] tracking-widest uppercase text-brand-gold border border-brand-gold/40 rounded-full px-4 py-2 hover:bg-brand-goldDim transition-colors">Refresh</button>
+        <div class="flex items-center gap-3">
+          <div class="flex gap-1 bg-brand-slate border border-white/10 rounded-full p-1">
+            <button id="view-map" class="view-toggle font-mono text-[10px] tracking-widest uppercase rounded-full px-4 py-2 bg-brand-gold text-brand-obsidian transition-colors">Map</button>
+            <button id="view-list" class="view-toggle font-mono text-[10px] tracking-widest uppercase rounded-full px-4 py-2 text-brand-muted transition-colors">List</button>
+          </div>
+          <button id="tables-refresh" class="font-mono text-[11px] tracking-widest uppercase text-brand-gold border border-brand-gold/40 rounded-full px-4 py-2 hover:bg-brand-goldDim transition-colors">Refresh</button>
+        </div>
       </div>
-      <div id="tables-list" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+      <!-- Legend -->
+      <div class="flex flex-wrap items-center gap-4 mb-5 font-mono text-[10px] tracking-widest uppercase text-brand-muted">
+        <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm border border-white/25 bg-brand-obsidian"></span>Empty</span>
+        <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm border border-brand-gold" style="background:rgba(245,197,24,0.25)"></span>Reserved</span>
+        <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm border border-emerald-400" style="background:rgba(52,211,153,0.3)"></span>Checked in</span>
+      </div>
+
+      <!-- MAP VIEW: two decks stacked -->
+      <div id="tables-map" class="space-y-8">
+        <div>
+          <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-3">Lower Deck</div>
+          <div id="deck-lower" class="bg-brand-slate border border-white/5 rounded-3xl p-3 md:p-5"></div>
+        </div>
+        <div>
+          <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-3">Main Deck</div>
+          <div id="deck-main" class="bg-brand-slate border border-white/5 rounded-3xl p-3 md:p-5"></div>
+        </div>
+      </div>
+
+      <!-- LIST VIEW (original) -->
+      <div id="tables-list" class="hidden grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       <div id="tables-empty" class="hidden text-center text-brand-muted text-sm font-light py-12">No tables found.</div>
     </div>
 
+  </div>
+
+  <!-- ---------- SPOT DETAIL SHEET (deck-map tap) ---------- -->
+  <div id="spot-sheet" class="hidden fixed inset-0 z-50 flex items-end md:items-center justify-center">
+    <div id="spot-sheet-backdrop" class="absolute inset-0 bg-brand-obsidian/70 backdrop-blur-sm"></div>
+    <div id="spot-sheet-card" class="relative w-full md:max-w-md bg-brand-slate border-t md:border border-brand-gold/30 rounded-t-3xl md:rounded-3xl p-6 md:p-7 shadow-2xl">
+      <div class="flex items-start justify-between mb-5">
+        <div>
+          <div id="spot-id" class="font-serif text-3xl text-brand-ice leading-tight">LC1</div>
+          <div id="spot-package" class="font-mono text-[11px] tracking-widest text-brand-gold uppercase mt-1">Lounge Couch</div>
+        </div>
+        <span id="spot-status" class="font-mono text-[10px] tracking-widest uppercase border rounded-full px-3 py-1 text-brand-muted border-white/20">&mdash;</span>
+      </div>
+
+      <div class="text-center bg-brand-obsidian/40 border border-white/5 rounded-2xl p-5 mb-5">
+        <div class="flex items-baseline justify-center gap-2">
+          <span id="spot-seated" class="font-serif text-5xl text-brand-gold tabular-nums">0</span>
+          <span class="font-mono text-brand-muted text-lg">/</span>
+          <span id="spot-booked" class="font-serif text-3xl text-brand-muted tabular-nums">0</span>
+        </div>
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">seated / booked</div>
+      </div>
+
+      <div class="mb-6">
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Reserved by</div>
+        <div id="spot-who" class="text-brand-ice text-sm font-light">Unreserved</div>
+      </div>
+
+      <button id="spot-close" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Close</button>
+    </div>
   </div>
 
   <!-- Supabase JS + QR scanner -->
@@ -364,6 +425,21 @@
           detail('Boarding', 'Manila Yacht Club') +
         '</div>';
 
+      // Guest manifest — the names Manila Yacht Club needs to tick off
+      var names = Array.isArray(b.guest_names) ? b.guest_names.filter(function(n){ return String(n).trim(); }) : [];
+      if (names.length) {
+        var nameRows = names.map(function (nm, i) {
+          return '<div class="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">' +
+            '<span class="font-mono text-[11px] text-brand-muted w-6">' + (i+1) + '</span>' +
+            '<span class="text-brand-ice text-sm">' + esc(nm) + '</span></div>';
+        }).join('');
+        box.innerHTML +=
+          '<div class="bg-brand-obsidian/40 border border-white/5 rounded-2xl p-4 mb-6">' +
+            '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Guest manifest (' + names.length + ')</div>' +
+            nameRows +
+          '</div>';
+      }
+
       if (confirmed) {
         box.innerHTML +=
           '<div class="border-t border-white/10 pt-6">' +
@@ -439,46 +515,219 @@
         $('sum-expected').textContent = s.expected_heads || 0;
         $('sum-checked').textContent  = s.checked_in_bookings || 0;
         $('sum-pending').textContent  = s.pending_bookings || 0;
+        var cEl = $('sum-couch'); if (cEl) cEl.textContent = s.present_couch || 0;
+        var eEl = $('sum-entrance'); if (eEl) eEl.textContent = s.present_entrance || 0;
       } catch (e) { /* leave last known values */ }
     }
 
+    // ---------------- DECK LAYOUTS ----------------
+    // Positions are in a 1000x340 viewBox per deck, matching the floor-plan layout.
+    // Bow (front of boat) points RIGHT, same as the printed plans.
+    var DECKS = {
+      lower: {
+        // fixtures (non-bookable) drawn for orientation
+        fixtures: [
+          { x: 60,  y: 120, w: 70,  h: 100, label: 'RECEPTION', fill: 'rgba(138,160,173,0.18)' },
+          { x: 815, y: 95,  w: 70,  h: 150, label: 'EXEC TABLE', fill: 'rgba(94,60,40,0.55)', round: true }
+        ],
+        spots: [
+          { id: 'LC1', x: 300, y: 90,  w: 130, h: 70 },
+          { id: 'LC2', x: 560, y: 90,  w: 130, h: 70 },
+          { id: 'LC3', x: 300, y: 190, w: 130, h: 70 },
+          { id: 'LC4', x: 560, y: 190, w: 130, h: 70 }
+        ]
+      },
+      main: {
+        fixtures: [
+          { x: 60,  y: 120, w: 55,  h: 100, label: 'BAR', fill: 'rgba(138,160,173,0.18)' },
+          { x: 150, y: 130, w: 150, h: 80,  label: 'BEER PONG', fill: 'rgba(94,60,40,0.55)', round: true }
+        ],
+        spots: [
+          { id: 'DC1', x: 70,  y: 40,  w: 70,  h: 55, kind: 'deck' },
+          { id: 'DC2', x: 70,  y: 250, w: 70,  h: 55, kind: 'deck' },
+          { id: 'DT1', x: 360, y: 40,  w: 70,  h: 55, kind: 'cocktail' },
+          { id: 'DT2', x: 360, y: 250, w: 70,  h: 55, kind: 'cocktail' },
+          { id: 'LC5', x: 500, y: 95,  w: 130, h: 70 },
+          { id: 'LC6', x: 720, y: 95,  w: 130, h: 70 },
+          { id: 'LC7', x: 500, y: 200, w: 130, h: 70 }
+        ]
+      }
+    };
+
+    // Build one SVG deck; tablesById maps id -> live table data.
+    function drawDeck(deckKey, tablesById) {
+      var deck = DECKS[deckKey];
+      var W = 1000, H = 340;
+      var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block" xmlns="http://www.w3.org/2000/svg">';
+
+      // hull outline (rounded rectangle tapering to a bow on the right)
+      s += '<path d="M40,40 L820,40 Q980,40 980,170 Q980,300 820,300 L40,300 Q20,300 20,280 L20,60 Q20,40 40,40 Z" ' +
+           'fill="rgba(10,26,36,0.6)" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>';
+
+      // fixtures
+      (deck.fixtures || []).forEach(function (f) {
+        var rx = f.round ? (f.h/2) : 10;
+        s += '<rect x="' + f.x + '" y="' + f.y + '" width="' + f.w + '" height="' + f.h + '" rx="' + rx + '" ' +
+             'fill="' + f.fill + '" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>';
+        s += '<text x="' + (f.x + f.w/2) + '" y="' + (f.y + f.h/2) + '" fill="#8AA0AD" font-family="monospace" ' +
+             'font-size="11" letter-spacing="1" text-anchor="middle" dominant-baseline="middle">' + f.label + '</text>';
+      });
+
+      // bookable spots
+      deck.spots.forEach(function (sp) {
+        var t = tablesById[sp.id];
+        var seated = t ? (t.seated || 0) : 0;
+        var booked = t ? (t.booked_pax || 0) : 0;
+        var reserved = t && (t.reserved_by && t.reserved_by.length);
+        var checkedIn = t && t.any_checked_in;
+
+        var fill, stroke, txt;
+        if (checkedIn) { fill = 'rgba(52,211,153,0.30)'; stroke = '#34D399'; txt = '#A7F3D0'; }
+        else if (reserved) { fill = 'rgba(245,197,24,0.22)'; stroke = '#F5C518'; txt = '#F5C518'; }
+        else { fill = 'rgba(10,26,36,0.5)'; stroke = 'rgba(255,255,255,0.22)'; txt = '#8AA0AD'; }
+
+        var cx = sp.x + sp.w/2, cy = sp.y + sp.h/2;
+        s += '<g class="deck-spot" data-id="' + sp.id + '" style="cursor:pointer">';
+        s += '<rect x="' + sp.x + '" y="' + sp.y + '" width="' + sp.w + '" height="' + sp.h + '" rx="10" ' +
+             'fill="' + fill + '" stroke="' + stroke + '" stroke-width="2"/>';
+        // label (id)
+        s += '<text x="' + cx + '" y="' + (cy - 8) + '" fill="' + txt + '" font-family="monospace" font-size="15" ' +
+             'font-weight="bold" letter-spacing="1" text-anchor="middle" dominant-baseline="middle">' + sp.id + '</text>';
+        // count (seated / booked) only if there is a booking
+        if (booked > 0) {
+          s += '<text x="' + cx + '" y="' + (cy + 12) + '" fill="' + txt + '" font-family="monospace" font-size="12" ' +
+               'text-anchor="middle" dominant-baseline="middle">' + seated + '/' + booked + '</text>';
+        }
+        s += '</g>';
+      });
+
+      s += '</svg>';
+      return s;
+    }
+
     // ---------------- TABLE BOARD ----------------
-    async function loadTables() {
+    var lastTables = [];
+
+    function renderDeckMaps(tables) {
+      var byId = {};
+      tables.forEach(function (t) { byId[String(t.id).toUpperCase()] = t; });
+      $('deck-lower').innerHTML = drawDeck('lower', byId);
+      $('deck-main').innerHTML  = drawDeck('main', byId);
+      // wire taps -> show who's on that spot
+      document.querySelectorAll('.deck-spot').forEach(function (g) {
+        g.addEventListener('click', function () {
+          var id = g.getAttribute('data-id');
+          openSpotSheet(id, byId[id]);
+        });
+      });
+    }
+
+    // Styled spot-detail sheet (replaces the browser alert)
+    function openSpotSheet(id, t) {
+      var sheet = $('spot-sheet');
+      $('spot-id').textContent = id;
+      var statusEl = $('spot-status');
+      if (!t) {
+        $('spot-package').textContent = '';
+        $('spot-seated').textContent = '0';
+        $('spot-booked').textContent = '0';
+        $('spot-who').textContent = 'No booking yet';
+        statusEl.textContent = 'Empty';
+        statusEl.className = 'font-mono text-[10px] tracking-widest uppercase border rounded-full px-3 py-1 text-brand-muted border-white/20';
+      } else {
+        var seated = t.seated || 0, booked = t.booked_pax || 0;
+        var reserved = t.reserved_by && t.reserved_by.length;
+        var checkedIn = t.any_checked_in;
+        $('spot-package').textContent = t.package || '';
+        $('spot-seated').textContent = seated;
+        $('spot-booked').textContent = booked;
+        $('spot-who').textContent = reserved ? t.reserved_by.join(', ') : 'Unreserved';
+        if (checkedIn) {
+          statusEl.textContent = 'Checked in';
+          statusEl.className = 'font-mono text-[10px] tracking-widest uppercase border rounded-full px-3 py-1 text-emerald-300 border-emerald-400/40';
+        } else if (reserved) {
+          statusEl.textContent = 'Reserved';
+          statusEl.className = 'font-mono text-[10px] tracking-widest uppercase border rounded-full px-3 py-1 text-brand-gold border-brand-gold/40';
+        } else {
+          statusEl.textContent = 'Empty';
+          statusEl.className = 'font-mono text-[10px] tracking-widest uppercase border rounded-full px-3 py-1 text-brand-muted border-white/20';
+        }
+      }
+      sheet.classList.remove('hidden');
+    }
+    function closeSpotSheet() { $('spot-sheet').classList.add('hidden'); }
+    (function () {
+      var closeBtn = $('spot-close');
+      var backdrop = $('spot-sheet-backdrop');
+      if (closeBtn) closeBtn.addEventListener('click', closeSpotSheet);
+      if (backdrop) backdrop.addEventListener('click', closeSpotSheet);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSpotSheet(); });
+    })();
+
+    function renderTableList(tables) {
       var list = $('tables-list');
+      if (!tables.length) { list.innerHTML = ''; return; }
+      list.innerHTML = tables.map(function (t) {
+        var seated = t.seated || 0;
+        var booked = t.booked_pax || 0;
+        var occupied = t.any_checked_in;
+        var accent = occupied ? 'border-emerald-400/40' : 'border-white/10';
+        var who = (t.reserved_by && t.reserved_by.length) ? t.reserved_by.map(esc).join(', ') : 'Unreserved';
+        return '' +
+          '<div class="bg-brand-slate border ' + accent + ' rounded-2xl p-5 flex items-center justify-between">' +
+            '<div class="pr-3">' +
+              '<div class="font-serif text-xl text-brand-ice">' + esc(t.id) + '</div>' +
+              '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">' + esc(t.package || '') + '</div>' +
+              '<div class="text-xs text-brand-muted font-light mt-1">' + who + '</div>' +
+            '</div>' +
+            '<div class="text-right shrink-0">' +
+              '<div class="font-serif text-3xl ' + (occupied ? 'text-emerald-300' : 'text-brand-muted') + '">' + seated + '</div>' +
+              '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase">of ' + booked + ' booked</div>' +
+            '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function loadTables() {
       try {
         var headers = await authHeader();
         var res = await fetch(API_BASE + '/api/reception/tables', { headers: headers });
         if (res.status === 401) { showGate(); return; }
         var data = await res.json();
         var tables = (data && data.tables) || [];
+        lastTables = tables;
         if (!tables.length) {
-          list.innerHTML = ''; $('tables-empty').classList.remove('hidden'); return;
+          $('tables-empty').classList.remove('hidden');
+        } else {
+          $('tables-empty').classList.add('hidden');
         }
-        $('tables-empty').classList.add('hidden');
-        list.innerHTML = tables.map(function (t) {
-          var seated = t.seated || 0;
-          var booked = t.booked_pax || 0;
-          var occupied = t.any_checked_in;
-          var accent = occupied ? 'border-emerald-400/40' : 'border-white/10';
-          var who = (t.reserved_by && t.reserved_by.length) ? t.reserved_by.map(esc).join(', ') : 'Unreserved';
-          return '' +
-            '<div class="bg-brand-slate border ' + accent + ' rounded-2xl p-5 flex items-center justify-between">' +
-              '<div class="pr-3">' +
-                '<div class="font-serif text-xl text-brand-ice">' + esc(t.id) + '</div>' +
-                '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mt-1">' + esc(t.package || '') + '</div>' +
-                '<div class="text-xs text-brand-muted font-light mt-1">' + who + '</div>' +
-              '</div>' +
-              '<div class="text-right shrink-0">' +
-                '<div class="font-serif text-3xl ' + (occupied ? 'text-emerald-300' : 'text-brand-muted') + '">' + seated + '</div>' +
-                '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase">of ' + booked + ' booked</div>' +
-              '</div>' +
-            '</div>';
-        }).join('');
+        // Deck maps always render (they show empty spots even with no bookings)
+        renderDeckMaps(tables);
+        renderTableList(tables);
       } catch (e) {
-        list.innerHTML = '<div class="col-span-full text-center text-brand-muted text-sm font-mono py-8">Could not load tables.</div>';
+        $('tables-list').innerHTML = '<div class="col-span-full text-center text-brand-muted text-sm font-mono py-8">Could not load tables.</div>';
       }
     }
     $('tables-refresh').addEventListener('click', function(){ loadTables(); loadSummary(); });
+
+    // Map / List view toggle
+    (function () {
+      var mapBtn = $('view-map'), listBtn = $('view-list');
+      var mapWrap = $('tables-map'), listWrap = $('tables-list');
+      function setView(v) {
+        var isMap = (v === 'map');
+        mapWrap.classList.toggle('hidden', !isMap);
+        listWrap.classList.toggle('hidden', isMap);
+        mapBtn.classList.toggle('bg-brand-gold', isMap);
+        mapBtn.classList.toggle('text-brand-obsidian', isMap);
+        mapBtn.classList.toggle('text-brand-muted', !isMap);
+        listBtn.classList.toggle('bg-brand-gold', !isMap);
+        listBtn.classList.toggle('text-brand-obsidian', !isMap);
+        listBtn.classList.toggle('text-brand-muted', isMap);
+      }
+      mapBtn.addEventListener('click', function(){ setView('map'); });
+      listBtn.addEventListener('click', function(){ setView('list'); });
+    })();
 
     // ---------------- utils ----------------
     function detail(label, value) {
