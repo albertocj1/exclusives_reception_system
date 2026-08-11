@@ -91,7 +91,7 @@
         
         <!-- Logo Area (Top Left on Mobile) -->
         <div class="flex items-center gap-2 md:gap-4 order-1">
-          <div class="font-serif text-lg md:text-2xl text-brand-gold leading-none drop-shadow-md">Exclusives&nbsp;PH</div>
+          <div class="font-serif text-lg md:text-xl xl:text-2xl text-brand-gold leading-none drop-shadow-md">Exclusives&nbsp;PH</div>
           <div class="font-mono text-[9px] md:text-xs tracking-widest text-brand-muted uppercase border-l border-white/10 pl-2 md:pl-4">Bar</div>
         </div>
 
@@ -414,6 +414,16 @@
         const isNew = (new Date() - new Date(order.created_at)) < 60000;
         const pulseClass = (isNew && activeTab === 'sent') ? 'new-order-pulse' : '';
         const tableName = order.table_name || 'Walk-in / Bar';
+        let highlightClass = 'text-brand-ice';
+        let tableBadge = '';
+        
+        // Highlight VIP tables (LC/DC spots) so runners prioritize them
+        if (tableName.startsWith('LC') || tableName.startsWith('DC')) {
+            highlightClass = 'text-brand-gold';
+            tableBadge = '<span class="ml-2 font-mono text-[9px] tracking-widest uppercase bg-brand-gold text-brand-obsidian px-2 py-0.5 rounded align-middle">VIP</span>';
+        } else if (tableName !== 'Walk-in / Bar') {
+            tableBadge = '<span class="ml-2 font-mono text-[9px] tracking-widest uppercase bg-brand-ice text-brand-obsidian px-2 py-0.5 rounded align-middle">Guest</span>';
+        }
 
         const itemsHtml = (order.items || []).map(item => `
           <div class="flex items-start gap-2.5 md:gap-3 py-2 md:py-1.5 border-b border-white/5 last:border-0">
@@ -452,7 +462,7 @@
         return `
           <div class="bg-brand-slate border border-white/10 rounded-xl md:rounded-2xl p-4 md:p-5 flex flex-col h-full shadow-lg ${pulseClass}">
             <div class="flex items-center justify-between mb-3 md:mb-4 pb-3 md:pb-4 border-b border-white/5">
-              <div class="font-serif text-lg md:text-xl text-brand-ice truncate pr-2">${tableName}</div>
+              <div class="font-serif text-lg md:text-xl ${highlightClass} truncate pr-2">${tableName} ${tableBadge}</div>
               <div class="font-mono text-[10px] md:text-xs text-brand-muted whitespace-nowrap bg-brand-obsidian px-2 py-1 md:px-2.5 md:py-1 rounded-md">${timeStr}</div>
             </div>
             
