@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Exclusives PH — Bar Display</title>
+  <link rel="icon" type="image/x-icon" href="images/favicon.ico">
+  <link rel="shortcut icon" href="images/favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { serif: ['Fraunces','serif'], sans: ['Archivo','sans-serif'], mono: ['Space Mono','monospace'] },
+        colors: { brand: {
+          obsidian:'#0A1A24', slate:'#102A38', gold:'#F5C518',
+          goldDim:'rgba(245,197,24,0.15)', ice:'#F2EADD', muted:'#8AA0AD'
+        }}
+      }}
+    }
+  </script>
+
+  <script>
+    window.SUPABASE_URL      = "https://gvtutnofyrkmyyclfshe.supabase.co"; // <-- Your Project URL
+    window.SUPABASE_ANON_KEY = "sb_publishable_rapJHCk_P68ZgPDnqEPY7w_GfAv2ag4"; 
+    window.API_BASE          = "https://exclusivesph.onrender.com"; 
+  </script>
+
+  <style>
+    .ticket-tear {
+      position: relative;
+      border-top: 2px dashed rgba(245,197,24,0.25);
+    }
+    .ticket-tear::before, .ticket-tear::after {
+      content: '';
+      position: absolute; top: -8px;
+      width: 16px; height: 16px;
+      border-radius: 9999px;
+      background: #0A1A24;
+    }
+    .ticket-tear::before { left: -8px; }
+    .ticket-tear::after { right: -8px; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(245,197,24,0.2); border-radius: 9999px; }
+
+    button { -webkit-tap-highlight-color: transparent; }
+    
+    /* Auto-pulse for new orders */
+    @keyframes subtlePulse {
+      0% { box-shadow: 0 0 0 0 rgba(245,197,24, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(245,197,24, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(245,197,24, 0); }
+    }
+    .new-order-pulse { animation: subtlePulse 2s infinite; }
+  </style>
+</head>
+<body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- ================= LOGIN GATE ================= -->
+  <div id="gate" class="min-h-screen flex items-center justify-center px-6">
+    <div class="w-full max-w-md bg-brand-slate border border-white/5 rounded-3xl p-10 shadow-2xl">
+      <div class="text-center mb-8">
+        <div class="font-mono text-xs tracking-[0.3em] text-brand-gold uppercase mb-2">Exclusives PH</div>
+        <h1 class="font-serif text-3xl text-brand-ice">Bar Display</h1>
+      </div>
+      <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Email</label>
+      <input id="email" type="email" autocomplete="username" placeholder="staff@exclusivesph.com"
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-base px-4 py-4 outline-none mb-5">
+      <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-base px-4 py-4 outline-none mb-6">
+      <button id="login-btn" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors shadow-[0_0_15px_rgba(245,197,24,0.3)]">Log in</button>
+      <p id="gate-error" class="text-red-400 text-sm font-mono mt-4 hidden"></p>
+    </div>
+  </div>
+
+  <!-- ================= APP ================= -->
+  <div id="app" class="hidden flex-1 flex flex-col h-screen overflow-hidden">
+
+    <!-- Top bar -->
+    <header class="border-b border-white/5 bg-brand-slate/80 backdrop-blur-md shrink-0">
+      <div class="max-w-[1800px] mx-auto px-4 md:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="font-serif text-xl md:text-2xl text-brand-gold leading-none drop-shadow-md">Exclusives&nbsp;PH</div>
+          <div class="hidden sm:block font-mono text-xs tracking-widest text-brand-muted uppercase border-l border-white/10 pl-4">Bar Display</div>
+        </div>
+
+        <div class="flex flex-1 justify-center gap-2 md:gap-4 overflow-x-auto no-scrollbar">
+          <!-- Status Tabs -->
+          <button data-tab="sent" class="status-tab active font-mono text-[11px] tracking-widest uppercase rounded-full px-5 py-2.5 border border-brand-gold bg-brand-goldDim/20 text-brand-gold transition-colors whitespace-nowrap">
+            Sent to Bar <span id="count-sent" class="ml-1 opacity-80">(0)</span>
+          </button>
+          <button data-tab="held" class="status-tab font-mono text-[11px] tracking-widest uppercase rounded-full px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap">
+            Held <span id="count-held" class="ml-1 opacity-80">(0)</span>
+          </button>
+          <button data-tab="fulfilled" class="status-tab font-mono text-[11px] tracking-widest uppercase rounded-full px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap">
+            Fulfilled
+          </button>
+          <button data-tab="cancelled" class="status-tab font-mono text-[11px] tracking-widest uppercase rounded-full px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap">
+            Cancelled
+          </button>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2 font-mono text-sm text-brand-gold">
+            <span class="w-2 h-2 rounded-full bg-brand-gold animate-pulse"></span>
+            <span id="clock">--:--</span>
+          </div>
+          <button id="logout-btn" class="font-mono text-[11px] tracking-widest uppercase text-brand-muted hover:text-brand-ice border border-white/10 rounded-full px-4 py-2 transition-colors">Log out</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Orders Grid -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-brand-obsidian">
+      <div class="max-w-[1800px] mx-auto">
+        
+        <!-- Loading State -->
+        <div id="loading-state" class="hidden flex flex-col items-center justify-center py-20">
+          <div class="w-8 h-8 border-2 border-brand-gold/30 border-t-brand-gold rounded-full animate-spin mb-4"></div>
+          <div class="font-mono text-xs tracking-widest uppercase text-brand-muted">Fetching orders...</div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="hidden flex flex-col items-center justify-center py-32 text-center">
+          <div class="font-serif text-3xl text-brand-muted/50 mb-3">No orders here.</div>
+          <div class="font-mono text-sm text-brand-muted/40">The queue is currently empty.</div>
+        </div>
+
+        <!-- Grid -->
+        <div id="orders-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 items-start">
+          <!-- Order cards injected here -->
+        </div>
+
+      </div>
+    </main>
+
+  </div><!-- /#app -->
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-24 opacity-0 transition-all duration-300 bg-brand-slate border border-brand-gold/40 text-brand-ice text-sm font-mono px-6 py-3 rounded-full shadow-2xl z-50 pointer-events-none flex items-center gap-3">
+    <span id="toast-msg">Action completed</span>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+  (function () {
+    'use strict';
+    const $ = (id) => document.getElementById(id);
+    const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
+    const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+    let activeTab = 'sent';
+    let ordersData = [];
+    let pollingInterval = null;
+
+    // ---------------- AUTH ----------------
+    function showApp() { 
+      $('gate').classList.add('hidden'); 
+      $('app').classList.remove('hidden'); 
+      startPolling();
+    }
+    
+    function showGate() { 
+      $('app').classList.add('hidden'); 
+      $('gate').classList.remove('hidden'); 
+      stopPolling();
+    }
+
+    async function doLogin() {
+      const err = $('gate-error');
+      err.classList.add('hidden');
+      const email = $('email').value.trim();
+      const password = $('password').value;
+      if (!email || !password) return;
+      $('login-btn').disabled = true; $('login-btn').textContent = 'Logging in\u2026';
+      
+      try {
+        const res = await sb.auth.signInWithPassword({ email, password });
+        if (res.error) throw res.error;
+        showApp();
+      } catch (e) {
+        err.textContent = e.message || 'Login failed.';
+        err.classList.remove('hidden');
+      } finally {
+        $('login-btn').disabled = false; $('login-btn').textContent = 'Log in';
+      }
+    }
+    
+    $('login-btn').addEventListener('click', doLogin);
+    $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+
+    $('logout-btn').addEventListener('click', async () => {
+      await sb.auth.signOut();
+      showGate();
+    });
+
+    // Check session on load
+    sb.auth.getSession().then((s) => {
+      if (s?.data?.session) showApp();
+      else showGate();
+    });
+
+    // ---------------- CLOCK ----------------
+    function tickClock() {
+      $('clock').textContent = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    // ---------------- API HELPERS ----------------
+    async function apiFetch(endpoint, method = 'GET', body = null) {
+      const s = await sb.auth.getSession();
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Standard Supabase staff token
+      if (s?.data?.session?.access_token) {
+        headers['Authorization'] = 'Bearer ' + s.data.session.access_token;
+      }
+
+      const options = { method, headers };
+      if (body) options.body = JSON.stringify(body);
+
+      const res = await fetch(API_BASE + endpoint, options);
+      if (res.status === 401) {
+        showGate();
+        throw new Error('Unauthorized');
+      }
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'API request failed');
+      }
+      
+      return await res.json();
+    }
+
+    // ---------------- CORE LOGIC ----------------
+    function startPolling() {
+      fetchOrders();
+      pollingInterval = setInterval(fetchOrders, 10000); // Poll every 10 seconds
+    }
+
+    function stopPolling() {
+      if (pollingInterval) clearInterval(pollingInterval);
+    }
+
+    async function fetchOrders() {
+      try {
+        const rawOrders = await apiFetch('/api/orders');
+        ordersData = rawOrders || [];
+        updateTabCounts();
+        renderGrid();
+      } catch (err) {
+        console.error("Failed to fetch orders:", err);
+      }
+    }
+
+    async function changeOrderStatus(orderId, newStatus) {
+      try {
+        await apiFetch(`/api/orders/${orderId}/status`, 'PATCH', { status: newStatus });
+        showToast(`Order marked as ${newStatus}`);
+        fetchOrders(); // Immediately refresh
+      } catch (err) {
+        alert("Could not update order: " + err.message);
+      }
+    }
+
+    // ---------------- UI RENDERING ----------------
+    function updateTabCounts() {
+      const sentCount = ordersData.filter(o => o.status === 'sent').length;
+      const heldCount = ordersData.filter(o => o.status === 'held').length;
+      $('count-sent').textContent = `(${sentCount})`;
+      $('count-held').textContent = `(${heldCount})`;
+    }
+
+    function timeSince(dateString) {
+      const date = new Date(dateString);
+      const seconds = Math.floor((new Date() - date) / 1000);
+      let interval = seconds / 3600;
+      if (interval > 1) return Math.floor(interval) + "h ago";
+      interval = seconds / 60;
+      if (interval > 1) return Math.floor(interval) + "m ago";
+      return "Just now";
+    }
+
+    function renderGrid() {
+      const filteredOrders = ordersData.filter(o => o.status === activeTab);
+      
+      const grid = $('orders-grid');
+      const empty = $('empty-state');
+
+      if (filteredOrders.length === 0) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+
+      grid.innerHTML = filteredOrders.map(order => {
+        const timeStr = timeSince(order.created_at);
+        const isNew = (new Date() - new Date(order.created_at)) < 60000; // < 1 min old
+        const pulseClass = (isNew && activeTab === 'sent') ? 'new-order-pulse' : '';
+        const tableName = order.table_name || 'Walk-in / Bar';
+
+        // Build line items
+        const itemsHtml = (order.items || []).map(item => `
+          <div class="flex items-start gap-3 py-1.5 border-b border-white/5 last:border-0">
+            <div class="font-mono text-brand-gold font-bold text-sm min-w-[28px]">${item.qty}x</div>
+            <div class="text-brand-ice text-sm leading-tight">${item.name}</div>
+          </div>
+        `).join('');
+
+        // Action Buttons based on context
+        let actionButtons = '';
+        if (activeTab === 'sent') {
+          actionButtons = `
+            <button onclick="window.updateOrder('${order.id}', 'fulfilled')" class="flex-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 py-3 rounded-xl font-mono text-[11px] tracking-widest uppercase transition-colors">Fulfill</button>
+            <button onclick="window.updateOrder('${order.id}', 'held')" class="flex-1 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 py-3 rounded-xl font-mono text-[11px] tracking-widest uppercase transition-colors">Hold</button>
+          `;
+        } else if (activeTab === 'held') {
+          actionButtons = `
+            <button onclick="window.updateOrder('${order.id}', 'sent')" class="flex-1 bg-brand-gold/20 text-brand-gold hover:bg-brand-gold/30 border border-brand-gold/30 py-3 rounded-xl font-mono text-[11px] tracking-widest uppercase transition-colors">Send to Bar</button>
+            <button onclick="window.updateOrder('${order.id}', 'cancelled')" class="flex-1 bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/30 py-3 rounded-xl font-mono text-[11px] tracking-widest uppercase transition-colors">Cancel</button>
+          `;
+        } else if (activeTab === 'fulfilled' || activeTab === 'cancelled') {
+          actionButtons = `
+            <button onclick="window.updateOrder('${order.id}', 'sent')" class="w-full bg-white/5 text-brand-muted hover:bg-white/10 hover:text-brand-ice border border-white/10 py-3 rounded-xl font-mono text-[11px] tracking-widest uppercase transition-colors">Re-open (Sent)</button>
+          `;
+        }
+
+        // Highlight notes visually if they exist
+        const notesHtml = order.notes ? `
+          <div class="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-xl">
+            <div class="font-mono text-[10px] tracking-widest text-red-400 uppercase mb-1">Notes / Instructions</div>
+            <div class="text-sm text-red-100 font-light italic">${order.notes}</div>
+          </div>
+        ` : '';
+
+        return `
+          <div class="bg-brand-slate border border-white/10 rounded-2xl p-5 flex flex-col h-full shadow-lg ${pulseClass}">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-white/5">
+              <div class="font-serif text-xl text-brand-ice truncate pr-2">${tableName}</div>
+              <div class="font-mono text-xs text-brand-muted whitespace-nowrap bg-brand-obsidian px-2.5 py-1 rounded-md">${timeStr}</div>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto pr-1 mb-4">
+              ${itemsHtml}
+              ${notesHtml}
+            </div>
+            
+            <div class="ticket-tear pt-5 mt-auto flex gap-2">
+              ${actionButtons}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Expose for inline onclick handlers
+    window.updateOrder = function(id, status) {
+      changeOrderStatus(id, status);
+    };
+
+    // ---------------- TAB NAVIGATION ----------------
+    document.querySelectorAll('.status-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Remove active class from all
+        document.querySelectorAll('.status-tab').forEach(b => {
+          b.classList.remove('active', 'border-brand-gold', 'bg-brand-goldDim/20', 'text-brand-gold');
+          b.classList.add('border-white/10', 'text-brand-muted');
+        });
+        
+        // Add active class to target
+        const target = e.currentTarget;
+        target.classList.remove('border-white/10', 'text-brand-muted');
+        target.classList.add('active', 'border-brand-gold', 'bg-brand-goldDim/20', 'text-brand-gold');
+        
+        activeTab = target.getAttribute('data-tab');
+        renderGrid(); // Re-render immediately
+      });
+    });
+
+    // ---------------- TOAST ----------------
+    function showToast(msg) {
+      const t = $('toast');
+      $('toast-msg').textContent = msg;
+      t.classList.remove('translate-y-24', 'opacity-0');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => t.classList.add('translate-y-24', 'opacity-0'), 3000);
+    }
+
+  })();
+  </script>
+</body>
+</html>
