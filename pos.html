@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Exclusives PH — POS</title>
+  <link rel="icon" type="image/x-icon" href="images/favicon.ico">
+  <link rel="shortcut icon" href="images/favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { serif: ['Fraunces','serif'], sans: ['Archivo','sans-serif'], mono: ['Space Mono','monospace'] },
+        colors: { brand: {
+          obsidian:'#0A1A24', slate:'#102A38', gold:'#F5C518',
+          goldDim:'rgba(245,197,24,0.15)', ice:'#F2EADD', muted:'#8AA0AD'
+        }}
+      }}
+    }
+  </script>
+
+<script>
+    window.SUPABASE_URL     = "https://gvtutnofyrkmyyclfshe.supabase.co";   // <-- your Project URL
+    window.SUPABASE_ANON_KEY = "sb_publishable_rapJHCk_P68ZgPDnqEPY7w_GfAv2ag4";              // <-- your anon/public key (safe in frontend)
+    window.API_BASE          = "https://exclusivesph.onrender.com"; // <-- your Render backend
+  </script>
+
+  <style>
+    /* Perforated divider — same "ticket" grammar as the boarding pass emails
+       and the admin manifest, so this reads as one family with the rest of
+       the system. */
+    .ticket-tear {
+      position: relative;
+      border-top: 2px dashed rgba(245,197,24,0.25);
+    }
+    .ticket-tear::before, .ticket-tear::after {
+      content: '';
+      position: absolute; top: -8px;
+      width: 16px; height: 16px;
+      border-radius: 9999px;
+      background: #0A1A24;
+    }
+    .ticket-tear::before { left: -8px; }
+    .ticket-tear::after { right: -8px; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(245,197,24,0.2); border-radius: 9999px; }
+
+    button, .tap-target { -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen">
+
+  <!-- ================= LOGIN GATE ================= -->
+  <div id="gate" class="min-h-screen flex items-center justify-center px-6">
+    <div class="w-full max-w-md bg-brand-slate border border-white/5 rounded-3xl p-10">
+      <div class="text-center mb-8">
+        <div class="font-mono text-xs tracking-[0.3em] text-brand-gold uppercase mb-2">Exclusives PH</div>
+        <h1 class="font-serif text-3xl text-brand-ice">POS</h1>
+      </div>
+      <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Email</label>
+      <input id="email" type="email" autocomplete="username" placeholder="staff@exclusivesph.com"
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-base px-4 py-4 outline-none mb-5">
+      <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-base px-4 py-4 outline-none mb-6">
+      <button id="login-btn" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Log in</button>
+      <p id="gate-error" class="text-red-400 text-sm font-mono mt-4 hidden"></p>
+    </div>
+  </div>
+
+  <!-- ================= APP ================= -->
+  <div id="app" class="hidden">
+
+  <!-- Top bar -->
+  <header class="border-b border-white/5 bg-brand-slate/40">
+    <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="font-serif text-lg md:text-xl text-brand-gold leading-none">Exclusives&nbsp;PH</div>
+        <div class="hidden sm:block font-mono text-[10px] tracking-widest text-brand-muted uppercase">Point of Sale</div>
+      </div>
+
+      <div class="flex items-center gap-2 md:gap-3">
+        <input id="table-input" type="text" placeholder="Table / Guest name"
+               class="w-36 md:w-48 bg-brand-obsidian border border-white/10 rounded-full focus:border-brand-gold text-brand-ice text-xs px-4 py-2 outline-none placeholder:text-brand-muted/60">
+        <div class="hidden md:flex items-center gap-2 font-mono text-[11px] text-brand-muted">
+          <span id="clock">--:--</span>
+        </div>
+        <button id="logout-btn" class="font-mono text-[11px] tracking-widest uppercase text-brand-muted hover:text-brand-ice border border-white/10 rounded-full px-4 py-2 transition-colors">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row lg:items-start">
+
+    <!-- Category rail -->
+    <aside class="order-1 lg:w-52 shrink-0 border-b lg:border-b-0 lg:border-r border-white/5 lg:h-[calc(100vh-56px)] lg:sticky lg:top-0 overflow-x-auto lg:overflow-y-auto">
+      <div id="category-list" class="flex lg:flex-col gap-2 p-3 lg:p-4 min-w-max lg:min-w-0"></div>
+    </aside>
+
+    <!-- Item grid -->
+    <main class="order-2 flex-1 min-w-0 px-4 md:px-6 py-4">
+      <div class="mb-4">
+        <input id="search-input" type="text" placeholder="Search this category…"
+               class="w-full bg-brand-slate border border-white/10 rounded-2xl focus:border-brand-gold text-brand-ice text-sm px-5 py-3 outline-none placeholder:text-brand-muted/60">
+      </div>
+      <div id="item-grid" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3"></div>
+      <div id="item-empty" class="hidden text-center text-brand-muted text-sm font-light py-16">
+        Nothing matches that search.
+      </div>
+    </main>
+
+    <!-- Order ticket -->
+    <aside class="order-3 lg:w-[380px] shrink-0 border-t lg:border-t-0 lg:border-l border-white/5 lg:h-[calc(100vh-56px)] lg:sticky lg:top-0 lg:overflow-y-auto">
+      <div class="p-4 md:p-5 flex flex-col h-full">
+
+        <div class="flex items-center justify-between mb-1">
+          <div class="font-serif text-xl text-brand-ice">Order Ticket</div>
+          <div id="ticket-number" class="font-mono text-xs text-brand-gold tracking-widest">T-0000</div>
+        </div>
+        <div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-4">Manila Bay &middot; Yacht Sessions</div>
+
+        <div id="cart-empty" class="flex-1 flex items-center justify-center text-center py-10">
+          <p class="text-brand-muted text-sm font-light max-w-[220px]">No items yet — tap the menu to start a ticket.</p>
+        </div>
+
+        <div id="cart-lines" class="flex-1 space-y-3 hidden"></div>
+
+        <div id="ticket-totals" class="ticket-tear pt-4 mt-4 hidden">
+          <div class="flex items-center justify-between text-base pt-3">
+            <span class="font-serif text-brand-ice">Total</span>
+            <span id="total" class="font-mono text-brand-gold text-lg">₱0</span>
+          </div>
+
+          <textarea id="notes-input" rows="2" placeholder="Notes for the bar (e.g. no ice, allergy)…"
+                    class="w-full mt-4 bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-xs px-3 py-2 outline-none placeholder:text-brand-muted/60 resize-none"></textarea>
+
+          <div class="grid grid-cols-2 gap-2 mt-4">
+            <button id="btn-hold" class="font-mono text-[11px] tracking-widest uppercase border border-amber-400/40 text-amber-300 hover:bg-amber-400/10 hover:border-amber-300 rounded-full py-3 transition-colors">Hold</button>
+            <button id="btn-clear" class="font-mono text-[11px] tracking-widest uppercase border border-red-400/30 text-red-300 hover:bg-red-400/10 hover:border-red-300 rounded-full py-3 transition-colors">Clear</button>
+          </div>
+          <button id="btn-send" class="w-full mt-2 font-mono text-[11px] tracking-widest uppercase bg-brand-gold text-brand-obsidian font-bold rounded-full py-3.5 hover:bg-brand-ice transition-colors">Send to Bar</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  </div><!-- /#app -->
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 translate-y-20 opacity-0 transition-all duration-300 bg-brand-slate border border-brand-gold/40 text-brand-ice text-sm font-mono px-5 py-3 rounded-full shadow-lg z-50 pointer-events-none">
+    Sent to bar
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+  (function () {
+    'use strict';
+    const $ = (id) => document.getElementById(id);
+    const peso = (n) => '\u20B1' + Number(n || 0).toLocaleString('en-PH');
+    const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
+    const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+    // ---------------- AUTH ----------------
+    async function authHeader() {
+      const s = await sb.auth.getSession();
+      const token = s && s.data && s.data.session ? s.data.session.access_token : null;
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    function showApp() { $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); }
+    function showGate() { $('app').classList.add('hidden'); $('gate').classList.remove('hidden'); }
+
+    async function doLogin() {
+      const err = $('gate-error');
+      err.classList.add('hidden');
+      const email = $('email').value.trim();
+      const password = $('password').value;
+      if (!email || !password) return;
+      $('login-btn').disabled = true; $('login-btn').textContent = 'Logging in\u2026';
+      try {
+        const res = await sb.auth.signInWithPassword({ email, password });
+        if (res.error) {
+          err.textContent = res.error.message || 'Login failed.';
+          err.classList.remove('hidden');
+        } else {
+          showApp();
+        }
+      } catch (e) {
+        err.textContent = 'Could not reach the auth server.';
+        err.classList.remove('hidden');
+      } finally {
+        $('login-btn').disabled = false; $('login-btn').textContent = 'Log in';
+      }
+    }
+    $('login-btn').addEventListener('click', doLogin);
+    $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+
+    $('logout-btn').addEventListener('click', async () => {
+      await sb.auth.signOut();
+      showGate();
+    });
+
+    sb.auth.getSession().then((s) => {
+      if (s && s.data && s.data.session) showApp();
+      else showGate();
+    });
+
+    // ------------------------------------------------------------------
+    // MENU — from the Exclusives PH food & beverage menu.
+    // ------------------------------------------------------------------
+    const MENU = [
+      {
+        id: 'packages', label: 'Signature Packages',
+        items: [
+          { id: 'pkg-breeze',      name: 'Breeze',    desc: '6 cans of Sprite Lemon-Lime Soda + 1 bottle of Absolut Vodka',        price: 3550 },
+          { id: 'pkg-ignition-ab', name: 'Ignition',  desc: '6 cans of Red Bull Energy Drink + 1 bottle of Absolut Vodka',          price: 3850 },
+          { id: 'pkg-ignition-jg', name: 'Ignition',  desc: '6 cans of Red Bull Energy Drink + 1 bottle of Jägermeister',           price: 4000 },
+        ],
+      },
+      {
+        id: 'bottles', label: 'Bottles',
+        items: [
+          { id: 'btl-absolut', name: 'Absolut Vodka',              price: 2850 },
+          { id: 'btl-jager',   name: 'Jägermeister',                price: 3000 },
+          { id: 'btl-jwblack', name: 'Johnnie Walker Black Label', price: 3195 },
+        ],
+      },
+      {
+        id: 'beverages', label: 'Beverages',
+        items: [
+          { id: 'bev-water',   name: 'Bottled Water',                          price: 100 },
+          { id: 'bev-coke',    name: 'Coca-Cola Regular',                      price: 150 },
+          { id: 'bev-sprite',  name: 'Sprite Lemon-Lime Soda',                 price: 150 },
+          { id: 'bev-redbull', name: 'Red Bull Energy Drink',                  price: 200 },
+          { id: 'bev-lemondou',name: 'Lemon-Dou Peach Lemon', desc: 'Alcohol', price: 150 },
+          { id: 'bev-cocktail',name: 'Cocktail Drinks',       desc: 'Alcohol', price: 250 },
+        ],
+      },
+      {
+        id: 'foods', label: 'Foods',
+        items: [
+          { id: 'food-tacos',   name: 'Tacos',             price: 500 },
+          { id: 'food-nachos',  name: 'Nachos',             price: 550 },
+          { id: 'food-board',   name: 'Charcuterie Board', price: 750 },
+        ],
+      },
+    ];
+
+    let activeCategory = MENU[0].id;
+    let searchTerm = '';
+    let cart = []; // { id, name, price, qty }
+
+    // ---- clock ----
+    function tickClock() {
+      $('clock').textContent = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+    }
+    tickClock();
+    setInterval(tickClock, 15000);
+
+    // ---- ticket number (placeholder — replace with a real sequence from your backend) ----
+    $('ticket-number').textContent = 'T-' + String(Math.floor(1000 + Math.random() * 9000));
+
+    // ---- category rail ----
+    function renderCategories() {
+      const el = $('category-list');
+      el.innerHTML = MENU.map((cat) => {
+        const active = cat.id === activeCategory;
+        return `<button data-cat="${cat.id}"
+          class="tap-target text-left font-mono text-[11px] tracking-widest uppercase rounded-full lg:rounded-xl px-4 py-3 border transition-colors whitespace-nowrap
+          ${active
+            ? 'border-brand-gold bg-brand-goldDim/20 text-brand-gold'
+            : 'border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20'}">
+          ${cat.label}
+          <span class="ml-1.5 opacity-60">${cat.items.length}</span>
+        </button>`;
+      }).join('');
+      el.querySelectorAll('[data-cat]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          activeCategory = btn.getAttribute('data-cat');
+          renderCategories();
+          renderItems();
+        });
+      });
+    }
+
+    // ---- item grid ----
+    function renderItems() {
+      const cat = MENU.find((c) => c.id === activeCategory);
+      const term = searchTerm.trim().toLowerCase();
+      const items = cat.items.filter((it) => it.name.toLowerCase().includes(term) || (it.desc || '').toLowerCase().includes(term));
+
+      $('item-grid').classList.toggle('hidden', items.length === 0);
+      $('item-empty').classList.toggle('hidden', items.length !== 0);
+
+      $('item-grid').innerHTML = items.map((it) => `
+        <button data-add="${it.id}"
+          class="tap-target group text-left bg-brand-slate border border-white/5 hover:border-brand-gold/50 rounded-2xl p-4 transition-colors flex flex-col justify-between min-h-[112px]">
+          <div>
+            <div class="text-sm text-brand-ice leading-snug">${it.name}</div>
+            ${it.desc ? `<div class="text-brand-muted text-[11px] leading-snug mt-1">${it.desc}</div>` : ''}
+          </div>
+          <div class="flex items-center justify-between mt-3">
+            <span class="font-mono text-brand-gold text-sm">${peso(it.price)}</span>
+            <span class="font-mono text-[10px] tracking-widest uppercase text-brand-muted group-hover:text-brand-gold transition-colors">+ Add</span>
+          </div>
+        </button>
+      `).join('');
+
+      $('item-grid').querySelectorAll('[data-add]').forEach((btn) => {
+        btn.addEventListener('click', () => addToCart(btn.getAttribute('data-add')));
+      });
+    }
+
+    function findMenuItem(id) {
+      for (const cat of MENU) {
+        const it = cat.items.find((i) => i.id === id);
+        if (it) return it;
+      }
+      return null;
+    }
+
+    // ---- cart ----
+    function addToCart(id) {
+      const menuItem = findMenuItem(id);
+      if (!menuItem) return;
+      const line = cart.find((l) => l.id === id);
+      if (line) line.qty += 1;
+      else cart.push({ id: menuItem.id, name: menuItem.name, desc: menuItem.desc || '', price: menuItem.price, qty: 1 });
+      renderCart();
+    }
+
+    function changeQty(id, delta) {
+      const line = cart.find((l) => l.id === id);
+      if (!line) return;
+      line.qty += delta;
+      if (line.qty <= 0) cart = cart.filter((l) => l.id !== id);
+      renderCart();
+    }
+
+    function removeLine(id) {
+      cart = cart.filter((l) => l.id !== id);
+      renderCart();
+    }
+
+    function renderCart() {
+      const hasItems = cart.length > 0;
+      $('cart-empty').classList.toggle('hidden', hasItems);
+      $('cart-lines').classList.toggle('hidden', !hasItems);
+      $('ticket-totals').classList.toggle('hidden', !hasItems);
+
+      $('cart-lines').innerHTML = cart.map((l) => `
+        <div class="flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-brand-ice truncate">${l.name}</div>
+            <div class="font-mono text-xs text-brand-muted">${peso(l.price)} each${l.desc ? ' &middot; ' + l.desc : ''}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button data-dec="${l.id}" class="tap-target w-7 h-7 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-sm leading-none">–</button>
+            <span class="font-mono text-sm w-5 text-center">${l.qty}</span>
+            <button data-inc="${l.id}" class="tap-target w-7 h-7 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-sm leading-none">+</button>
+          </div>
+          <div class="font-mono text-sm text-brand-gold w-16 text-right">${peso(l.price * l.qty)}</div>
+          <button data-remove="${l.id}" class="tap-target text-brand-muted hover:text-red-300 text-sm leading-none px-1" title="Remove">&times;</button>
+        </div>
+      `).join('');
+
+      $('cart-lines').querySelectorAll('[data-inc]').forEach((b) => b.addEventListener('click', () => changeQty(b.getAttribute('data-inc'), 1)));
+      $('cart-lines').querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => changeQty(b.getAttribute('data-dec'), -1)));
+      $('cart-lines').querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => removeLine(b.getAttribute('data-remove'))));
+
+      const total = cart.reduce((s, l) => s + l.price * l.qty, 0);
+      $('total').textContent = peso(total);
+    }
+
+    function showToast(msg) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.classList.remove('translate-y-20', 'opacity-0');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 2200);
+    }
+
+    $('search-input').addEventListener('input', (e) => { searchTerm = e.target.value; renderItems(); });
+
+    $('btn-clear').addEventListener('click', () => {
+      if (!cart.length) return;
+      if (!confirm('Clear this ticket? This removes every item currently on it.')) return;
+      cart = [];
+      renderCart();
+    });
+
+    function newTicket() {
+      cart = [];
+      $('notes-input').value = '';
+      $('ticket-number').textContent = 'T-' + String(Math.floor(1000 + Math.random() * 9000));
+      renderCart();
+    }
+
+    async function submitOrder(status, btn) {
+      if (!cart.length) return;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = status === 'held' ? 'Holding\u2026' : 'Sending\u2026';
+      try {
+        const headers = await authHeader();
+        headers['Content-Type'] = 'application/json';
+        const res = await fetch(API_BASE + '/api/orders', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            table_name: $('table-input').value.trim() || null,
+            items: cart.map((l) => ({ id: l.id, qty: l.qty })),
+            notes: $('notes-input').value.trim() || null,
+            status,
+          }),
+        });
+        if (res.status === 401) { showGate(); return; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert((data && data.detail) || 'Could not save the order.');
+          return;
+        }
+        showToast(status === 'held' ? 'Ticket held' : (data.table_name ? `Sent to bar for ${data.table_name}` : 'Sent to bar'));
+        newTicket();
+      } catch (e) {
+        alert('Could not reach the server. Check your connection and try again.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
+    $('btn-hold').addEventListener('click', () => submitOrder('held', $('btn-hold')));
+    $('btn-send').addEventListener('click', () => submitOrder('sent', $('btn-send')));
+
+    renderCategories();
+    renderItems();
+    renderCart();
+  })();
+  </script>
+</body>
+</html>
