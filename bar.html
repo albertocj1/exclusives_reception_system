@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>Exclusives PH — Bar Display</title>
+  <title>Exclusives PH — Bar Display & Sales</title>
   <link rel="icon" type="image/x-icon" href="images/favicon.ico">
   <link rel="shortcut icon" href="images/favicon.ico">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -24,7 +24,7 @@
   </script>
 
   <script>
-    window.SUPABASE_URL      = "https://gvtutnofyrkmyyclfshe.supabase.co"; // <-- Your Project URL
+    window.SUPABASE_URL      = "https://gvtutnofyrkmyyclfshe.supabase.co"; 
     window.SUPABASE_ANON_KEY = "sb_publishable_rapJHCk_P68ZgPDnqEPY7w_GfAv2ag4"; 
     window.API_BASE          = "https://exclusivesph.onrender.com"; 
   </script>
@@ -50,7 +50,6 @@
 
     button { -webkit-tap-highlight-color: transparent; }
     
-    /* Auto-pulse for new orders */
     @keyframes subtlePulse {
       0% { box-shadow: 0 0 0 0 rgba(245,197,24, 0.4); }
       70% { box-shadow: 0 0 0 10px rgba(245,197,24, 0); }
@@ -104,6 +103,9 @@
           <button data-tab="cancelled" class="status-tab font-mono text-[11px] tracking-widest uppercase rounded-full px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap">
             Cancelled
           </button>
+          <button data-tab="dashboard" class="status-tab font-mono text-[11px] tracking-widest uppercase rounded-full px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap ml-4">
+            Dashboard
+          </button>
         </div>
 
         <div class="flex items-center gap-4">
@@ -116,7 +118,7 @@
       </div>
     </header>
 
-    <!-- Orders Grid -->
+    <!-- Main Content Area -->
     <main class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-brand-obsidian">
       <div class="max-w-[1800px] mx-auto">
         
@@ -126,15 +128,50 @@
           <div class="font-mono text-xs tracking-widest uppercase text-brand-muted">Fetching orders...</div>
         </div>
 
-        <!-- Empty State -->
+        <!-- Empty State (For Grids) -->
         <div id="empty-state" class="hidden flex flex-col items-center justify-center py-32 text-center">
           <div class="font-serif text-3xl text-brand-muted/50 mb-3">No orders here.</div>
           <div class="font-mono text-sm text-brand-muted/40">The queue is currently empty.</div>
         </div>
 
-        <!-- Grid -->
+        <!-- Orders Grid -->
         <div id="orders-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 items-start">
           <!-- Order cards injected here -->
+        </div>
+
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="hidden flex flex-col gap-6 max-w-6xl mx-auto">
+          <div class="mb-2">
+            <h2 class="font-serif text-3xl text-brand-ice">Sales Dashboard</h2>
+            <p class="font-mono text-xs text-brand-muted mt-2 tracking-widest uppercase">Metrics from currently loaded orders</p>
+          </div>
+          
+          <!-- Top Metric Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <!-- Revenue -->
+            <div class="bg-brand-slate border border-white/10 rounded-2xl p-6 shadow-lg">
+              <div class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-2">Total Fulfilled Revenue</div>
+              <div id="dash-revenue" class="font-serif text-4xl text-brand-gold font-bold">₱0</div>
+            </div>
+            <!-- Orders Count -->
+            <div class="bg-brand-slate border border-white/10 rounded-2xl p-6 shadow-lg">
+              <div class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-2">Fulfilled Orders</div>
+              <div id="dash-orders" class="font-serif text-4xl text-brand-ice font-bold">0</div>
+            </div>
+            <!-- AOV -->
+            <div class="bg-brand-slate border border-white/10 rounded-2xl p-6 shadow-lg">
+              <div class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-2">Average Order Value</div>
+              <div id="dash-aov" class="font-serif text-4xl text-brand-ice font-bold">₱0</div>
+            </div>
+          </div>
+
+          <!-- Top Items List -->
+          <div class="bg-brand-slate border border-white/10 rounded-2xl p-6 shadow-lg mt-2">
+            <div class="font-mono text-xs tracking-widest uppercase text-brand-gold mb-6 border-b border-white/5 pb-4">Top Selling Items (Fulfilled)</div>
+            <div id="dash-top-items" class="space-y-4">
+              <!-- Item rows injected here -->
+            </div>
+          </div>
         </div>
 
       </div>
@@ -152,6 +189,7 @@
   (function () {
     'use strict';
     const $ = (id) => document.getElementById(id);
+    const peso = (n) => '\u20B1' + Number(n || 0).toLocaleString('en-PH');
     const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
     const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
@@ -200,7 +238,6 @@
       showGate();
     });
 
-    // Check session on load
     sb.auth.getSession().then((s) => {
       if (s?.data?.session) showApp();
       else showGate();
@@ -216,11 +253,8 @@
     // ---------------- API HELPERS ----------------
     async function apiFetch(endpoint, method = 'GET', body = null) {
       const s = await sb.auth.getSession();
-      const headers = {
-        'Content-Type': 'application/json'
-      };
+      const headers = { 'Content-Type': 'application/json' };
       
-      // Standard Supabase staff token
       if (s?.data?.session?.access_token) {
         headers['Authorization'] = 'Bearer ' + s.data.session.access_token;
       }
@@ -233,12 +267,10 @@
         showGate();
         throw new Error('Unauthorized');
       }
-      
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || 'API request failed');
       }
-      
       return await res.json();
     }
 
@@ -257,7 +289,7 @@
         const rawOrders = await apiFetch('/api/orders');
         ordersData = rawOrders || [];
         updateTabCounts();
-        renderGrid();
+        renderView();
       } catch (err) {
         console.error("Failed to fetch orders:", err);
       }
@@ -267,13 +299,12 @@
       try {
         await apiFetch(`/api/orders/${orderId}/status`, 'PATCH', { status: newStatus });
         showToast(`Order marked as ${newStatus}`);
-        fetchOrders(); // Immediately refresh
+        fetchOrders();
       } catch (err) {
         alert("Could not update order: " + err.message);
       }
     }
 
-    // ---------------- UI RENDERING ----------------
     function updateTabCounts() {
       const sentCount = ordersData.filter(o => o.status === 'sent').length;
       const heldCount = ordersData.filter(o => o.status === 'held').length;
@@ -291,9 +322,77 @@
       return "Just now";
     }
 
+    // ---------------- UI RENDERING ----------------
+    function renderView() {
+      if (activeTab === 'dashboard') {
+        $('orders-grid').classList.add('hidden');
+        $('empty-state').classList.add('hidden');
+        $('dashboard-view').classList.remove('hidden');
+        $('dashboard-view').classList.add('flex');
+        renderDashboard();
+      } else {
+        $('dashboard-view').classList.add('hidden');
+        $('dashboard-view').classList.remove('flex');
+        $('orders-grid').classList.remove('hidden');
+        renderGrid();
+      }
+    }
+
+    function renderDashboard() {
+      const fulfilled = ordersData.filter(o => o.status === 'fulfilled');
+      
+      const totalRevenue = fulfilled.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      const ordersCount = fulfilled.length;
+      const aov = ordersCount > 0 ? (totalRevenue / ordersCount) : 0;
+
+      $('dash-revenue').textContent = peso(totalRevenue);
+      $('dash-orders').textContent = ordersCount;
+      $('dash-aov').textContent = peso(aov);
+
+      // Aggregate item quantities and calculate item revenue
+      const itemStats = {};
+      fulfilled.forEach(order => {
+        (order.items || []).forEach(item => {
+          if (!itemStats[item.name]) {
+            itemStats[item.name] = { qty: 0, revenue: 0 };
+          }
+          itemStats[item.name].qty += item.qty;
+          itemStats[item.name].revenue += (item.qty * (item.price || 0));
+        });
+      });
+
+      // Sort by quantity descending
+      const sortedItems = Object.entries(itemStats)
+        .map(([name, stats]) => ({ name, qty: stats.qty, revenue: stats.revenue }))
+        .sort((a, b) => b.qty - a.qty);
+
+      if (sortedItems.length === 0) {
+        $('dash-top-items').innerHTML = `<div class="text-brand-muted text-sm italic">No items fulfilled yet.</div>`;
+        return;
+      }
+
+      $('dash-top-items').innerHTML = sortedItems.map((item, index) => `
+        <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:border-brand-gold/30 transition-colors">
+          <div class="flex items-center gap-4">
+            <div class="font-mono text-brand-gold/50 text-sm w-4">${index + 1}.</div>
+            <div class="text-brand-ice text-sm">${item.name}</div>
+          </div>
+          <div class="flex items-center gap-6 text-right">
+            <div>
+              <div class="font-mono text-[10px] text-brand-muted tracking-widest uppercase">Qty</div>
+              <div class="font-mono text-brand-ice">${item.qty}</div>
+            </div>
+            <div class="w-24">
+              <div class="font-mono text-[10px] text-brand-muted tracking-widest uppercase">Sales</div>
+              <div class="font-mono text-brand-gold">${peso(item.revenue)}</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
     function renderGrid() {
       const filteredOrders = ordersData.filter(o => o.status === activeTab);
-      
       const grid = $('orders-grid');
       const empty = $('empty-state');
 
@@ -302,24 +401,24 @@
         empty.classList.remove('hidden');
         return;
       }
-
       empty.classList.add('hidden');
 
       grid.innerHTML = filteredOrders.map(order => {
         const timeStr = timeSince(order.created_at);
-        const isNew = (new Date() - new Date(order.created_at)) < 60000; // < 1 min old
+        const isNew = (new Date() - new Date(order.created_at)) < 60000;
         const pulseClass = (isNew && activeTab === 'sent') ? 'new-order-pulse' : '';
         const tableName = order.table_name || 'Walk-in / Bar';
 
-        // Build line items
         const itemsHtml = (order.items || []).map(item => `
           <div class="flex items-start gap-3 py-1.5 border-b border-white/5 last:border-0">
             <div class="font-mono text-brand-gold font-bold text-sm min-w-[28px]">${item.qty}x</div>
-            <div class="text-brand-ice text-sm leading-tight">${item.name}</div>
+            <div class="flex-1">
+              <div class="text-brand-ice text-sm leading-tight">${item.name}</div>
+            </div>
+            <div class="font-mono text-brand-muted text-xs">${peso(item.price * item.qty)}</div>
           </div>
         `).join('');
 
-        // Action Buttons based on context
         let actionButtons = '';
         if (activeTab === 'sent') {
           actionButtons = `
@@ -337,7 +436,6 @@
           `;
         }
 
-        // Highlight notes visually if they exist
         const notesHtml = order.notes ? `
           <div class="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-xl">
             <div class="font-mono text-[10px] tracking-widest text-red-400 uppercase mb-1">Notes / Instructions</div>
@@ -357,15 +455,20 @@
               ${notesHtml}
             </div>
             
-            <div class="ticket-tear pt-5 mt-auto flex gap-2">
-              ${actionButtons}
+            <div class="ticket-tear pt-5 mt-auto flex flex-col gap-3">
+              <div class="flex justify-between items-center text-sm">
+                <span class="font-serif text-brand-muted">Total</span>
+                <span class="font-mono text-brand-gold">${peso(order.total_amount)}</span>
+              </div>
+              <div class="flex gap-2">
+                ${actionButtons}
+              </div>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    // Expose for inline onclick handlers
     window.updateOrder = function(id, status) {
       changeOrderStatus(id, status);
     };
@@ -373,19 +476,17 @@
     // ---------------- TAB NAVIGATION ----------------
     document.querySelectorAll('.status-tab').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        // Remove active class from all
         document.querySelectorAll('.status-tab').forEach(b => {
           b.classList.remove('active', 'border-brand-gold', 'bg-brand-goldDim/20', 'text-brand-gold');
           b.classList.add('border-white/10', 'text-brand-muted');
         });
         
-        // Add active class to target
         const target = e.currentTarget;
         target.classList.remove('border-white/10', 'text-brand-muted');
         target.classList.add('active', 'border-brand-gold', 'bg-brand-goldDim/20', 'text-brand-gold');
         
         activeTab = target.getAttribute('data-tab');
-        renderGrid(); // Re-render immediately
+        renderView(); 
       });
     });
 
