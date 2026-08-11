@@ -81,12 +81,12 @@
         <p class="font-mono text-[10px] sm:text-xs text-brand-muted mb-6 uppercase tracking-widest">Guest scans this QR</p>
         
         <div class="bg-white p-3 rounded-2xl inline-block mb-6 shadow-lg">
-            <img src="images/gcash-qr.png" alt="GCash QR" class="w-40 h-40 sm:w-48 sm:h-48 object-contain">
+            <img src="gcash-qr.jpg" alt="GCash QR" class="w-40 h-40 sm:w-48 sm:h-48 object-contain">
         </div>
         
         <div class="flex flex-col gap-3">
-            <!-- Native camera trigger -->
-            <input type="file" id="camera-input" accept="image/jpeg, image/png, image/webp" capture="environment" class="hidden">
+            <!-- Native camera trigger with opacity-0 fix for strict mobile browsers -->
+            <input type="file" id="camera-input" accept="image/*" capture="environment" class="opacity-0 absolute -z-10 w-px h-px">
             
             <button id="btn-camera" class="w-full bg-blue-500 text-white py-3.5 sm:py-4 rounded-xl font-mono text-[11px] sm:text-xs tracking-widest uppercase font-bold transition-colors hover:bg-blue-400">
                 📸 Open Camera for Receipt
@@ -429,9 +429,12 @@
     // ---- Standard Order Creation (Cash or Hold) ----
     async function submitOrder(status, payment_method, btn) {
       if (!cart.length) return null;
-      const original = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = 'Sending\u2026';
+      let original = "";
+      if (btn) {
+        original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Sending\u2026';
+      }
       
       try {
         const headers = await authHeader();
@@ -453,13 +456,15 @@
           alert((data && data.detail) || 'Could not save the order.');
           return null;
         }
-        return data; // Return full order data
+        return data;
       } catch (e) {
         alert('Could not reach the server. Check your connection.');
         return null;
       } finally {
-        btn.disabled = false;
-        btn.textContent = original;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = original;
+        }
       }
     }
 
@@ -474,7 +479,7 @@
       if (res) { showToast('Sent to bar (Cash Paid)'); newTicket(); }
     });
 
-    // ---- GCash Upload Flow ----
+    // ---- GCash Upload Flow with Local Compression ----
     $('btn-pay-gcash').addEventListener('click', () => {
       if (!cart.length) return;
       $('gcash-modal').classList.remove('hidden');
@@ -489,27 +494,72 @@
       $('camera-input').click();
     });
 
+    async function compressImage(file, maxWidth = 1024, quality = 0.7) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > maxWidth) {
+                height = Math.round(height * (maxWidth / width));
+                width = maxWidth;
+              }
+            } else {
+              if (height > maxWidth) {
+                width = Math.round(width * (maxWidth / height));
+                height = maxWidth;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob((blob) => {
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              resolve(compressedFile);
+            }, 'image/jpeg', quality);
+          };
+          img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+      });
+    }
+
     $('camera-input').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+      const originalFile = e.target.files[0];
+      if (!originalFile) return;
       
       $('upload-status').classList.remove('hidden');
+      $('upload-status').textContent = 'Compressing receipt...';
       $('btn-camera').classList.add('hidden');
       $('btn-close-modal').classList.add('hidden');
       
       try {
-          // 1. Create the order first as GCash
-          const orderData = await submitOrder('sent', 'gcash', { textContent: '' }); 
+          const compressedFile = await compressImage(originalFile, 1024, 0.7);
+          
+          $('upload-status').textContent = 'Uploading Order & Receipt...';
+
+          const orderData = await submitOrder('sent', 'gcash', null); 
           if (!orderData) throw new Error("Failed to create order");
           
           const orderId = orderData.id;
           
-          // 2. Upload the receipt file
           const formData = new FormData();
-          formData.append('receipt', file);
+          formData.append('receipt', compressedFile);
           
           const headers = await authHeader(); 
-          // Do not set Content-Type; let the browser handle FormData boundary
           delete headers['Content-Type']; 
 
           const uploadRes = await fetch(API_BASE + `/api/orders/${orderId}/receipt`, {
