@@ -117,9 +117,6 @@
           <button data-tab="sent" class="status-tab active font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-brand-gold bg-brand-goldDim/20 text-brand-gold transition-colors whitespace-nowrap shrink-0">
             Sent <span id="count-sent" class="ml-1 opacity-80">(0)</span>
           </button>
-          <button data-tab="held" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
-            Held <span id="count-held" class="ml-1 opacity-80">(0)</span>
-          </button>
           <button data-tab="fulfilled" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
             Fulfilled
           </button>
@@ -346,9 +343,7 @@
 
     function updateTabCounts() {
       const sentCount = ordersData.filter(o => o.status === 'sent').length;
-      const heldCount = ordersData.filter(o => o.status === 'held').length;
       $('count-sent').textContent = `(${sentCount})`;
-      $('count-held').textContent = `(${heldCount})`;
     }
 
     function timeSince(dateString) {
@@ -463,16 +458,11 @@
         let actionButtons = '';
         if (activeTab === 'sent') {
           actionButtons = `
-            <div class="grid grid-cols-2 gap-2 w-full">
+            <div class="grid grid-cols-2 gap-2 w-full mb-1">
               <button onclick="window.updateOrder('${order.id}', 'fulfilled', 'cash')" class="bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 py-2.5 md:py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Paid Cash</button>
               <button onclick="window.updateOrder('${order.id}', 'fulfilled', 'gcash')" class="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-500/30 py-2.5 md:py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Paid GCash</button>
-              <button onclick="window.updateOrder('${order.id}', 'held')" class="col-span-2 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 py-2 md:py-2.5 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Hold Order</button>
             </div>
-          `;
-        } else if (activeTab === 'held') {
-          actionButtons = `
-            <button onclick="window.updateOrder('${order.id}', 'sent')" class="flex-1 bg-brand-gold/20 text-brand-gold hover:bg-brand-gold/30 border border-brand-gold/30 py-2.5 md:py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Send to Bar</button>
-            <button onclick="window.updateOrder('${order.id}', 'cancelled')" class="flex-1 bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/30 py-2.5 md:py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Cancel</button>
+            <button onclick="window.updateOrder('${order.id}', 'cancelled')" class="w-full bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/30 py-2 md:py-2.5 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Cancel Order</button>
           `;
         } else if (activeTab === 'fulfilled' || activeTab === 'cancelled') {
           actionButtons = `
@@ -515,7 +505,7 @@
                 <span class="font-serif text-brand-muted">Total</span>
                 <span class="font-mono text-brand-gold">${peso(order.total_amount)}</span>
               </div>
-              <div class="flex gap-2 w-full">
+              <div class="flex flex-col gap-2 w-full">
                 ${actionButtons}
               </div>
             </div>
