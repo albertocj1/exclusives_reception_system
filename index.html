@@ -531,6 +531,7 @@
         return;
       }
       stopCamera();
+      highlightName = '';
       lookup(code);
     }
 
@@ -544,6 +545,7 @@
       unlockAudio();
       var code = extractTicketCode(input);
       if (code) {
+        highlightName = '';
         lookup(code);
       } else if (input.length < 2) {
         showResultBox();
@@ -608,7 +610,10 @@
       }
     }
 
+    var highlightName = '';   // name typed in search, highlighted on the guest card
+
     async function searchByName(query) {
+      highlightName = query.toLowerCase();
       renderLoading('Searching for "' + query + '"…');
       try {
         var res = await api('/api/reception/search?q=' + encodeURIComponent(query));
@@ -739,37 +744,73 @@
           detail('Already inside', String(already ? (b.heads_present || 0) : 0)) +
         '</div>';
 
-      var names = Array.isArray(b.guest_names) ? b.guest_names.filter(function (n) { return String(n).trim(); }) : [];
-      if (names.length) {
-        html +=
-          '<div class="bg-brand-obsidian/40 border border-white/5 rounded-2xl p-4 mb-6">' +
-            '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Guest names (' + names.length + ')</div>' +
-            names.map(function (nm, i) {
-              return '<div class="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">' +
-                '<span class="font-mono text-[11px] text-brand-muted w-6">' + (i + 1) + '</span>' +
-                '<span class="text-brand-ice text-sm">' + esc(nm) + '</span></div>';
-            }).join('') +
-          '</div>';
-      }
+      // Tick-box mode: every guest has a name, so staff tick each person as they walk in.
+      var allNames = Array.isArray(b.guest_names) ? b.guest_names.map(function (n) { return String(n == null ? '' : n).trim(); }) : [];
+      var tickMode = confirmed && !!b.id && maxHeads > 0 && allNames.length === maxHeads &&
+                     allNames.every(function (n) { return n; });
+      var inside = (Array.isArray(b.checked_in_guests) ? b.checked_in_guests : []).filter(function (i) {
+        return i >= 0 && i < allNames.length;
+      });
+      var untracked = already && !inside.length ? (b.heads_present || 0) : 0;   // checked in before names were tracked
 
-      if (confirmed && b.id) {
-        var start = already ? Math.min(maxHeads, Math.max(1, b.heads_present || 1)) : maxHeads;
+      if (tickMode) {
         html +=
           '<div class="border-t border-white/10 pt-6">' +
-            '<div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-4 text-center">How many of this group are here now?</div>' +
-            '<div class="flex items-center justify-center gap-6 mb-2">' +
-              '<button id="heads-minus" type="button" aria-label="One fewer" class="w-16 h-16 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">&minus;</button>' +
-              '<input id="heads-val" type="number" inputmode="numeric" value="' + start + '" min="1" max="' + maxHeads + '" class="w-20 bg-transparent text-center font-serif text-5xl text-brand-gold outline-none">' +
-              '<button id="heads-plus" type="button" aria-label="One more" class="w-16 h-16 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">+</button>' +
+            '<div class="flex items-center justify-between gap-3 mb-3">' +
+              '<div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase">Tick who is here</div>' +
+              '<button id="tick-all" type="button" class="font-mono text-[11px] tracking-widest uppercase text-brand-obsidian bg-brand-gold rounded-full px-4 py-2 hover:bg-brand-ice transition-colors">All here</button>' +
             '</div>' +
-            '<div class="text-center font-mono text-[11px] text-brand-muted mb-5">of ' + maxHeads + ' booked' +
-              (maxHeads > 1 ? ' &middot; <button id="heads-all" type="button" class="text-brand-gold underline">all ' + maxHeads + '</button>' : '') + '</div>' +
+            (untracked ? '<div class="bg-amber-400/10 border border-amber-400/30 rounded-xl p-3 text-amber-200 text-xs font-mono mb-3">' + untracked +
+              ' were checked in before names were tracked. Tick everyone who is inside now.</div>' : '') +
+            '<div class="bg-brand-obsidian/40 border border-white/5 rounded-2xl divide-y divide-white/5 mb-4">' +
+              allNames.map(function (nm, i) {
+                var isIn = inside.indexOf(i) !== -1;
+                var hit = highlightName && nm.toLowerCase().indexOf(highlightName) !== -1;
+                return '<label class="flex items-center gap-4 px-4 py-3 cursor-pointer select-none' + (hit ? ' bg-brand-goldDim' : '') + '">' +
+                  '<input type="checkbox" class="guest-tick w-7 h-7 rounded accent-emerald-400 shrink-0" data-i="' + i + '"' + (isIn ? ' checked' : '') + '>' +
+                  '<span class="flex-1 text-brand-ice text-base">' + esc(nm) + '</span>' +
+                  (isIn ? '<span class="font-mono text-[10px] tracking-widest uppercase text-emerald-300">Inside</span>' : '') +
+                '</label>';
+              }).join('') +
+            '</div>' +
+            '<div class="text-center font-mono text-sm text-brand-muted mb-3"><span id="tick-count" class="text-brand-gold font-bold text-lg">0</span> of ' + maxHeads + ' ticked</div>' +
             '<p id="heads-error" class="hidden text-center text-red-300 font-mono text-xs mb-3"></p>' +
-            '<button id="checkin-btn" type="button" class="w-full py-5 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors disabled:opacity-50">' +
-              (already ? 'Update head count' : 'Check in guest') +
-            '</button>' +
+            '<button id="checkin-btn" type="button" class="w-full py-5 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors disabled:opacity-40">Check in</button>' +
             (already ? '<button id="undo-btn" type="button" class="w-full mt-3 py-3 rounded-full border border-red-400/40 text-red-300 font-mono text-[11px] tracking-widest uppercase hover:bg-red-400/10 transition-colors">Undo check-in (wrong guest)</button>' : '') +
           '</div>';
+      } else {
+        var names = allNames.filter(function (n) { return n; });
+        if (names.length) {
+          html +=
+            '<div class="bg-brand-obsidian/40 border border-white/5 rounded-2xl p-4 mb-6">' +
+              '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Guest names (' + names.length + ')</div>' +
+              names.map(function (nm, i) {
+                return '<div class="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">' +
+                  '<span class="font-mono text-[11px] text-brand-muted w-6">' + (i + 1) + '</span>' +
+                  '<span class="text-brand-ice text-sm">' + esc(nm) + '</span></div>';
+              }).join('') +
+            '</div>';
+        }
+
+        if (confirmed && b.id) {
+          var start = already ? Math.min(maxHeads, Math.max(1, b.heads_present || 1)) : maxHeads;
+          html +=
+            '<div class="border-t border-white/10 pt-6">' +
+              '<div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-4 text-center">How many of this group are here now?</div>' +
+              '<div class="flex items-center justify-center gap-6 mb-2">' +
+                '<button id="heads-minus" type="button" aria-label="One fewer" class="w-16 h-16 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">&minus;</button>' +
+                '<input id="heads-val" type="number" inputmode="numeric" value="' + start + '" min="1" max="' + maxHeads + '" class="w-20 bg-transparent text-center font-serif text-5xl text-brand-gold outline-none">' +
+                '<button id="heads-plus" type="button" aria-label="One more" class="w-16 h-16 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">+</button>' +
+              '</div>' +
+              '<div class="text-center font-mono text-[11px] text-brand-muted mb-5">of ' + maxHeads + ' booked' +
+                (maxHeads > 1 ? ' &middot; <button id="heads-all" type="button" class="text-brand-gold underline">all ' + maxHeads + '</button>' : '') + '</div>' +
+              '<p id="heads-error" class="hidden text-center text-red-300 font-mono text-xs mb-3"></p>' +
+              '<button id="checkin-btn" type="button" class="w-full py-5 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors disabled:opacity-50">' +
+                (already ? 'Update head count' : 'Check in guest') +
+              '</button>' +
+              (already ? '<button id="undo-btn" type="button" class="w-full mt-3 py-3 rounded-full border border-red-400/40 text-red-300 font-mono text-[11px] tracking-widest uppercase hover:bg-red-400/10 transition-colors">Undo check-in (wrong guest)</button>' : '') +
+            '</div>';
+        }
       }
 
       html += '<button id="result-clear" type="button" class="w-full mt-4 py-3 rounded-full border border-white/10 text-brand-muted font-mono text-[11px] tracking-widest uppercase hover:text-brand-ice transition-colors">' +
@@ -779,9 +820,8 @@
       $('result-clear').addEventListener('click', resetForNextGuest);
 
       if (confirmed && b.id) {
-        wireHeads(maxHeads);
-        var label = already ? 'Update head count' : 'Check in guest';
-        $('checkin-btn').addEventListener('click', function () { checkin(b, label); });
+        if (tickMode) wireTicks(already); else wireHeads(maxHeads);
+        $('checkin-btn').addEventListener('click', function () { checkin(b, tickMode); });
         if (already) $('undo-btn').addEventListener('click', function () { undoCheckin(b); });
       }
     }
@@ -806,22 +846,52 @@
       val.addEventListener('keydown', function (e) { if (e.key === 'Enter') { set(readHeads(maxHeads)); $('checkin-btn').click(); } });
     }
 
+    function tickedIndexes() {
+      return Array.prototype.map.call(document.querySelectorAll('.guest-tick:checked'), function (el) {
+        return parseInt(el.getAttribute('data-i'), 10);
+      });
+    }
+
+    function wireTicks(already) {
+      var btn = $('checkin-btn');
+      function update() {
+        var n = tickedIndexes().length;
+        $('tick-count').textContent = n;
+        btn.textContent = already ? (n ? 'Save \u00b7 ' + n + ' inside' : 'Save') : (n ? 'Check in ' + n + (n === 1 ? ' guest' : ' guests') : 'Tick who is here');
+        btn.disabled = n === 0;
+        $('heads-error').classList.add('hidden');
+      }
+      document.querySelectorAll('.guest-tick').forEach(function (el) { el.addEventListener('change', update); });
+      $('tick-all').addEventListener('click', function () {
+        document.querySelectorAll('.guest-tick').forEach(function (el) { el.checked = true; });
+        update();
+      });
+      update();
+    }
+
     var saving = false;
-    async function checkin(b, label) {
+    async function checkin(b, tickMode) {
       if (saving) return;
       var maxHeads = Math.max(0, parseInt(b.guests, 10) || 0);
-      var heads = readHeads(maxHeads);
-      if (heads < 1) {
+      var payload;
+      if (tickMode) {
+        var idx = tickedIndexes();
+        payload = { heads_present: idx.length, checked_in_guests: idx };
+      } else {
+        payload = { heads_present: readHeads(maxHeads) };
+      }
+      if (payload.heads_present < 1) {
         var err = $('heads-error');
-        err.textContent = 'Enter at least 1 person. Use "Undo check-in" if this guest was checked in by mistake.';
+        err.textContent = (tickMode ? 'Tick at least 1 person.' : 'Enter at least 1 person.') + ' Use "Undo check-in" if this guest was checked in by mistake.';
         err.classList.remove('hidden');
         return;
       }
       var btn = $('checkin-btn');
-      saving = true; btn.disabled = true; btn.textContent = 'Saving…';
+      var label = btn.textContent;
+      saving = true; btn.disabled = true; btn.textContent = 'Saving\u2026';
       try {
         var res = await api('/api/reception/checkin/' + encodeURIComponent(b.id), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heads_present: heads })
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error(await errorDetail(res, 'Check-in failed. Try again.'));
         var data = await res.json();
@@ -866,10 +936,17 @@
         '<div class="w-20 h-20 rounded-full border border-emerald-400 text-emerald-300 flex items-center justify-center text-4xl mx-auto mb-5">&check;</div>' +
         '<div class="font-serif text-3xl text-brand-ice mb-1">' + esc(data.full_name) + '</div>' +
         '<div class="font-mono text-sm text-brand-muted mb-2">' + (data.table_id ? esc(spotName(data.table_id)) + ' &middot; ' : '') + esc(String(data.heads_present)) + ' of ' + esc(String(data.guests)) + ' inside</div>' +
+        insideNamesLine(data.checked_in_guests, b.guest_names) +
         (PERKS[b.package] && PERKS[b.package].tone !== 'plain' ? '<div class="font-mono text-xs text-brand-gold mb-6">' + PERKS[b.package].line + '</div>' : '<div class="mb-6"></div>') +
         '<button id="scan-again" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">' +
           (cameraWanted ? 'Scan next guest' : 'Next guest') + '</button>';
       $('scan-again').addEventListener('click', resetForNextGuest);
+    }
+
+    function insideNamesLine(idx, names) {
+      names = Array.isArray(names) ? names : [];
+      var who = (Array.isArray(idx) ? idx : []).map(function (i) { return names[i]; }).filter(Boolean);
+      return who.length ? '<div class="text-emerald-200 text-sm mb-2">Inside: ' + who.map(esc).join(', ') + '</div>' : '';
     }
 
     function resetForNextGuest() {
@@ -969,6 +1046,7 @@
                 (g.ticket_code ? '<div class="font-mono text-[10px] text-brand-gold">' + esc(g.ticket_code) + '</div>' : '') +
               '</div>' +
               '<div class="font-mono text-xs text-brand-muted mt-1">' + esc(g.package) + ' &middot; ' + esc(spotText) + '</div>' +
+              guestNamesLine(g) +
             '</div>' +
             '<div class="text-right shrink-0">' +
               badge +
@@ -985,6 +1063,17 @@
           window.scrollTo({ top: 0, behavior: 'smooth' });
         });
       });
+    }
+
+    // Each named guest: green with a tick if inside, grey if not yet.
+    function guestNamesLine(g) {
+      var names = Array.isArray(g.guest_names) ? g.guest_names : [];
+      if (!names.length) return '';
+      var inside = Array.isArray(g.checked_in_guests) ? g.checked_in_guests : [];
+      return '<div class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs">' + names.map(function (nm, i) {
+        var isIn = inside.indexOf(i) !== -1;
+        return '<span class="' + (isIn ? 'text-emerald-300' : 'text-brand-muted') + '">' + (isIn ? '&check; ' : '') + esc(nm) + '</span>';
+      }).join('') + '</div>';
     }
 
     $('guests-refresh').addEventListener('click', function () { loadGuests(); loadSummary(); });
