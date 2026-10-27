@@ -619,7 +619,8 @@
         var res = await api('/api/reception/search?q=' + encodeURIComponent(query));
         if (!res.ok) throw new Error(await errorDetail(res, 'Search failed. Try again.'));
         var data = await res.json();
-        var results = data.results || [];
+        // Only confirmed bookings belong at the door (the backend filters too).
+        var results = (data.results || []).filter(isConfirmed);
 
         if (results.length === 0) {
           feedback('bad');
@@ -644,6 +645,8 @@
       }
       return '<span class="font-mono text-[10px] tracking-widest uppercase text-brand-muted border border-white/20 rounded-full px-3 py-1 shrink-0">Not yet arrived</span>';
     }
+
+    function isConfirmed(g) { return g && g.status === 'confirmed'; }
 
     function spotLabel(tableId) {
       return tableId ? spotName(tableId) + ' (' + tableId + ')' : 'General Admission';
@@ -990,9 +993,9 @@
         var res = await api('/api/reception/guests');
         if (!res.ok) throw new Error('Failed to load guests.');
         var data = await res.json();
-        allGuests = data.guests || [];
-        $('guests-count-total').textContent = data.total || 0;
-        $('guests-count-checked').textContent = data.checked_in || 0;
+        allGuests = (data.guests || []).filter(isConfirmed);
+        $('guests-count-total').textContent = allGuests.length;
+        $('guests-count-checked').textContent = allGuests.filter(function (g) { return g.checked_in; }).length;
         renderGuests();
       } catch (e) {
         if (e.isAuth) return;
