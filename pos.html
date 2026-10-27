@@ -264,6 +264,8 @@
     const peso = (n) => '₱' + Number(n || 0).toLocaleString('en-PH');
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     // Short order code shown here and on the bar display, so staff can match a ticket.
+    // Lower-case and drop accents so "jager" finds "J\u00e4germeister".
+    const fold = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const shortCode = (id) => '#' + String(id || '').replace(/-/g, '').slice(-4).toUpperCase();
     const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
     const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -410,14 +412,14 @@
         items: [
           { id: 'pkg-breeze',      name: 'Breeze',                   desc: '6 Sprite + 1 Absolut Vodka',   price: 3550 },
           { id: 'pkg-ignition-ab', name: 'Ignition (Absolut)',       desc: '6 Red Bull + 1 Absolut Vodka', price: 3850 },
-          { id: 'pkg-ignition-jg', name: 'Ignition (Jägermeister)', desc: '6 Red Bull + 1 Jägermeister',  price: 4000 },
+          { id: 'pkg-ignition-jg', name: 'Ignition (Jagermeister)', desc: '6 Red Bull + 1 Jagermeister',  price: 4000 },
         ],
       },
       {
         id: 'bottles', label: 'Bottles',
         items: [
           { id: 'btl-absolut', name: 'Absolut Vodka',              price: 2850 },
-          { id: 'btl-jager',   name: 'Jägermeister',          price: 3000 },
+          { id: 'btl-jager',   name: 'Jagermeister',          price: 3000 },
           { id: 'btl-jwblack', name: 'Johnnie Walker Black Label', price: 3195 },
         ],
       },
@@ -508,10 +510,10 @@
 
     // ---- item grid ----
     function renderItems() {
-      const term = searchTerm.trim().toLowerCase();
+      const term = fold(searchTerm.trim());
       // With a search term, look through every category, not just the open one.
       const pool = term ? MENU.flatMap((c) => c.items) : MENU.find((c) => c.id === activeCategory).items;
-      const items = pool.filter((it) => !term || it.name.toLowerCase().includes(term) || (it.desc || '').toLowerCase().includes(term));
+      const items = pool.filter((it) => !term || fold(it.name).includes(term) || fold(it.desc || '').includes(term));
 
       $('item-grid').classList.toggle('hidden', items.length === 0);
       $('item-empty').classList.toggle('hidden', items.length !== 0);
