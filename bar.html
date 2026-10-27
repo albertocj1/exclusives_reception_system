@@ -614,7 +614,9 @@
     // Free bottles / food / cans per booking. Allowances and picks come from the backend;
     // the backend refuses anything over the allowance or before check-in.
     const SPOT_NAMES = { LC1: 'SVIP 1', LC2: 'SVIP 2', LC3: 'SVIP 3', LC5: 'SVIP 4', LC6: 'SVIP 5', LC4: 'VIP 1', LC7: 'VIP 2', DC1: 'VIP 3', DC2: 'VIP 4', DT1: 'Table 1', DT2: 'Table 2', DT3: 'Table 3', DT4: 'Table 4' };
-    const TYPE_LABEL = { bottle: 'Bottle', food: 'Food', can: 'Cans' };
+    const TYPE_LABEL = { bottle: 'Bottle', food: 'Food', can: 'Cans', drink: 'Cocktails' };
+    const QTY_TYPES = ['can', 'drink'];   // given several at a time
+    const leftTotal = (b) => b.remaining.bottle + b.remaining.food + b.remaining.can + (b.remaining.drink || 0);
     let comps = null;              // { bookings, options } from /api/comps
     let compsError = '';
     let compClaims = null;         // all active claims, for the dashboard
@@ -622,7 +624,7 @@
     let compsQuery = '';
     let compsFetching = false;
 
-    const spotOf = (b) => (b.table_id ? (SPOT_NAMES[b.table_id] || b.table_id) : 'No table');
+    const spotOf = (b) => (b.table_id ? (SPOT_NAMES[b.table_id] || b.table_id) : (b.package === 'Entrance Fee' ? 'Entrance' : 'No table'));
 
     async function fetchComps() {
       if (compsFetching || !appVisible) return;
@@ -661,7 +663,7 @@
         const hay = fold([spotOf(b), b.table_id || '', b.full_name, b.package, b.ticket_code || ''].join(' '));
         if (hay.indexOf(q) === -1) return false;
       }
-      if (compsFilter === 'left') return b.remaining.bottle + b.remaining.food + b.remaining.can > 0;
+      if (compsFilter === 'left') return leftTotal(b) > 0;
       return true;
     }
 
@@ -696,6 +698,7 @@
             <div>
               <div class="text-brand-ice text-sm">${TYPE_LABEL[t]}</div>
               <div class="font-mono text-[11px] ${left ? 'text-brand-gold' : 'text-brand-muted'}">${left} of ${total} left</div>
+              ${t === 'drink' ? `<div class="text-[10px] text-brand-muted">${b.drinks_per_person} per person \u00b7 ${b.checked_in ? b.heads_present + ' of ' + b.guests + ' inside' : b.guests + ' booked'}</div>` : ''}
             </div>
             <button data-give="${esc(b.id)}" data-type="${t}" ${can ? '' : 'disabled'}
               class="font-mono text-[10px] tracking-widest uppercase rounded-xl px-4 py-3 border transition-colors ${can ? 'border-cyan-400/50 text-cyan-200 bg-cyan-400/10 hover:bg-cyan-400/20' : 'border-white/10 text-brand-muted opacity-40'}">
@@ -706,10 +709,10 @@
         const history = (b.claims || []).slice().reverse().map((c) => `
           <div class="flex items-center justify-between gap-2 text-[11px] py-1">
             <span class="text-brand-muted">${new Date(c.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
-            <span class="flex-1 text-brand-ice truncate">${c.qty > 1 ? c.qty + '× ' : ''}${esc(c.item_name || TYPE_LABEL[c.item_type])}${c.item_type === 'can' && c.item_name ? ' (can)' : ''}</span>
+            <span class="flex-1 text-brand-ice truncate">${c.qty > 1 ? c.qty + '× ' : ''}${esc(c.item_type === 'drink' ? 'Cocktail' + (c.qty > 1 ? 's' : '') : (c.item_name || TYPE_LABEL[c.item_type]))}${c.item_type === 'can' && c.item_name ? ' (can)' : ''}</span>
             <button data-undo="${esc(c.claim_id)}" data-who="${esc(spotOf(b) + ' · ' + b.full_name)}" data-what="${esc((c.qty > 1 ? c.qty + '× ' : '') + (c.item_name || TYPE_LABEL[c.item_type]))}" class="font-mono text-[10px] uppercase tracking-widest text-red-300 hover:text-red-200">Undo</button>
           </div>`).join('');
-        const done = b.remaining.bottle + b.remaining.food + b.remaining.can === 0;
+        const done = leftTotal(b) === 0;
         return `<div class="bg-brand-slate border ${b.checked_in ? (done ? 'border-white/10' : 'border-cyan-400/40') : 'border-white/10'} rounded-2xl p-4 md:p-5 ${done ? 'opacity-70' : ''}">
           <div class="flex items-start justify-between gap-2 mb-2">
             <div class="min-w-0">
@@ -720,9 +723,9 @@
               ? '<span class="font-mono text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-emerald-400/50 text-emerald-300 shrink-0">Checked in</span>'
               : '<span class="font-mono text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-amber-400/50 text-amber-300 shrink-0">Not checked in</span>'}
           </div>
-          <div class="text-[12px] mb-3 ${b.picks.bottles.length || b.picks.food ? 'text-cyan-300' : 'text-amber-300'}">Picks: ${esc(picksLine(b))}</div>
+          ${b.allowance.bottle || b.allowance.food ? `<div class="text-[12px] mb-3 ${b.picks.bottles.length || b.picks.food ? 'text-cyan-300' : 'text-amber-300'}">Picks: ${esc(picksLine(b))}</div>` : ''}
           ${b.checked_in ? '' : '<div class="text-amber-200 text-xs font-mono bg-amber-400/10 border border-amber-400/30 rounded-lg p-2 mb-2">Send to reception to check in first.</div>'}
-          ${row('bottle')}${row('food')}${row('can')}
+          ${row('bottle')}${row('food')}${row('can')}${row('drink')}
           ${history ? `<div class="mt-3 pt-2 border-t border-white/5"><div class="font-mono text-[9px] tracking-widest uppercase text-brand-muted mb-1">Given</div>${history}</div>` : ''}
         </div>`;
       }).join('');
@@ -746,8 +749,12 @@
       $('give-title').textContent = 'Give ' + TYPE_LABEL[type].toLowerCase();
       $('give-sub').textContent = spotOf(booking) + ' · ' + booking.full_name + ' · ' + left + ' left';
       $('give-error').classList.add('hidden');
-      $('give-qty-wrap').classList.toggle('hidden', type !== 'can');
-      if (type === 'can') { giving.qty = left; $('give-qty').textContent = left; }
+      $('give-qty-wrap').classList.toggle('hidden', QTY_TYPES.indexOf(type) === -1);
+      $('give-qty-wrap').querySelector('.font-mono').textContent = type === 'drink' ? 'How many cocktails' : 'How many cans';
+      // Cans: all at once by default. Cocktails: one person's share (2) by default.
+      if (type === 'can') giving.qty = left;
+      if (type === 'drink') giving.qty = Math.min(left, booking.drinks_per_person || 1);
+      $('give-qty').textContent = giving.qty;
 
       const options = (comps && comps.options && comps.options[type]) || [];
       const picked = type === 'bottle' ? (booking.picks.bottles || []) : type === 'food' ? [booking.picks.food].filter(Boolean) : [];
@@ -768,7 +775,7 @@
     $('give-close').addEventListener('click', closeGive);
     $('give-modal').addEventListener('click', (e) => { if (e.target === $('give-modal')) closeGive(); });
     $('give-minus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.max(1, giving.qty - 1); $('give-qty').textContent = giving.qty; });
-    $('give-plus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.min(giving.booking.remaining.can, giving.qty + 1); $('give-qty').textContent = giving.qty; });
+    $('give-plus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.min(giving.booking.remaining[giving.type], giving.qty + 1); $('give-qty').textContent = giving.qty; });
 
     $('give-options').addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-opt]');
@@ -779,10 +786,11 @@
       btn.textContent = 'Saving…';
       try {
         const updated = await apiFetch('/api/comps/' + encodeURIComponent(g.booking.id) + '/claim', 'POST',
-          { item_type: g.type, item_name: name, qty: g.type === 'can' ? g.qty : 1 });
+          { item_type: g.type, item_name: name, qty: QTY_TYPES.indexOf(g.type) !== -1 ? g.qty : 1 });
         replaceComp(updated);
         closeGive();
-        showToast('Given: ' + (g.type === 'can' ? g.qty + '× ' + (name || 'can') : name) + ' → ' + spotOf(g.booking));
+        const what = g.type === 'drink' ? g.qty + '\u00d7 cocktail' + (g.qty > 1 ? 's' : '') : g.type === 'can' ? g.qty + '\u00d7 ' + (name || 'can') : name;
+        showToast('Given: ' + what + ' \u2192 ' + spotOf(g.booking) + (g.booking.table_id ? '' : ' \u00b7 ' + g.booking.full_name));
       } catch (err) {
         if (err.isAuth) return;
         $('give-error').textContent = err.message;
@@ -829,7 +837,7 @@
       return compClaims.filter((c) => new Date(c.created_at).getTime() >= since);
     }
     function compsTally(list) {
-      const out = { bottle: {}, food: {}, can: {} };
+      const out = { bottle: {}, food: {}, can: {}, drink: {} };
       list.forEach((c) => {
         const key = c.item_name || (c.item_type === 'can' ? 'Mixed' : '?');
         out[c.item_type][key] = (out[c.item_type][key] || 0) + 1;
@@ -851,7 +859,7 @@
           <div class="text-right text-xs text-brand-muted">${entries.map(([n, q]) => esc(n) + ' ×' + q).join('<br>')}</div>
         </div>`;
       };
-      el.innerHTML = block('bottle', 'Bottles') + block('food', 'Food') + block('can', 'Cans');
+      el.innerHTML = block('bottle', 'Bottles') + block('food', 'Food') + block('can', 'Cans') + block('drink', 'Cocktails (entrance)');
     }
 
     // ---------------- DASHBOARD ----------------
@@ -1019,7 +1027,7 @@
         ].concat((() => {
           const t = compsTally(compList);
           const rows = [];
-          [['bottle', 'Bottle'], ['food', 'Food'], ['can', 'Cans']].forEach(([k, label]) => {
+          [['bottle', 'Bottle'], ['food', 'Food'], ['can', 'Cans'], ['drink', 'Cocktails']].forEach(([k, label]) => {
             Object.entries(t[k]).sort((a, b) => b[1] - a[1]).forEach(([n, q]) => rows.push([label + ' \u2014 ' + n, q]));
           });
           return rows.length ? rows : [['None', 0]];
@@ -1056,7 +1064,7 @@
           gives.push(byClaim[c.claim_id]);
         });
         add([['Time', 'Table', 'Booker', 'Package', 'Type', 'Item', 'Qty', 'Given by']].concat(gives.map((c) => [
-          when(c.created_at), c.table_id ? (SPOT_NAMES[c.table_id] || c.table_id) : 'No table', c.full_name || '', c.package || '',
+          when(c.created_at), spotOf(c), c.full_name || '', c.package || '',
           TYPE_LABEL[c.item_type] || c.item_type, c.item_name || (c.item_type === 'can' ? 'Mixed' : ''), c.qty, c.given_by || '',
         ])), 'Complimentary', [20, 10, 22, 18, 8, 28, 6, 26]);
 
