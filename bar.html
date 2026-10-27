@@ -171,9 +171,20 @@
 
         <!-- Dashboard View -->
         <div id="dashboard-view" class="hidden flex flex-col gap-4 md:gap-6 max-w-6xl mx-auto">
-          <div class="mb-1 md:mb-2 text-center md:text-left">
-            <h2 class="font-serif text-2xl md:text-3xl text-brand-ice">Sales Dashboard</h2>
-            <p class="font-mono text-[10px] md:text-xs text-brand-muted mt-1 md:mt-2 tracking-widest uppercase">Metrics from currently loaded orders</p>
+          <div class="mb-1 md:mb-2 flex flex-col md:flex-row md:items-end md:justify-between gap-3 text-center md:text-left">
+            <div>
+              <h2 class="font-serif text-2xl md:text-3xl text-brand-ice">Sales Dashboard</h2>
+              <p id="dash-scope" class="font-mono text-[10px] md:text-xs text-brand-muted mt-1 md:mt-2 tracking-widest uppercase">&nbsp;</p>
+            </div>
+            <div class="flex items-center justify-center gap-2">
+              <select id="dash-period" class="bg-brand-slate border border-white/10 rounded-full text-brand-ice font-mono text-[11px] tracking-wider px-4 py-2 outline-none focus:border-brand-gold">
+                <option value="12">Last 12 hours</option>
+                <option value="24" selected>Last 24 hours</option>
+                <option value="72">Last 3 days</option>
+                <option value="0">All orders</option>
+              </select>
+              <button id="dash-export" type="button" class="font-mono text-[11px] tracking-widest uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 rounded-full px-4 py-2 transition-colors disabled:opacity-40">Export Excel</button>
+            </div>
           </div>
           
           <!-- Top Metric Cards -->
@@ -209,6 +220,15 @@
             </div>
           </div>
 
+          <!-- Spend per table -->
+          <div class="bg-brand-slate border border-white/10 rounded-2xl p-4 md:p-6 shadow-lg">
+            <div class="flex items-center justify-between border-b border-white/5 pb-3 md:pb-4 mb-3 md:mb-4">
+              <div class="font-mono text-[10px] md:text-xs tracking-widest uppercase text-brand-gold">Spend per table (served)</div>
+              <div class="font-mono text-[10px] text-brand-muted">tap a table to see its orders</div>
+            </div>
+            <div id="dash-tables" class="space-y-2"></div>
+          </div>
+
           <!-- Top Items List -->
           <div class="bg-brand-slate border border-white/10 rounded-2xl p-4 md:p-6 shadow-lg mt-2">
             <div class="font-mono text-[10px] md:text-xs tracking-widest uppercase text-brand-gold mb-4 md:mb-6 border-b border-white/5 pb-3 md:pb-4 text-center md:text-left">Top Selling Items (Fulfilled)</div>
@@ -229,6 +249,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   <script>
   (function () {
     'use strict';
@@ -236,6 +257,8 @@
     const peso = (n) => '₱' + Number(n || 0).toLocaleString('en-PH');
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     // Same short code the POS shows after sending, so staff can match a ticket.
+    // Lower-case and drop accents so "jager" finds "J\u00e4germeister" on older orders.
+    const fold = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const shortCode = (id) => '#' + String(id || '').replace(/-/g, '').slice(-4).toUpperCase();
     const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
     const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -504,13 +527,16 @@
     // ---------------- SEARCH ----------------
     let searchTerm = '';
     function matchesSearch(order) {
-      const q = searchTerm.trim().toLowerCase().replace(/^#/, '');
+      const q = fold(searchTerm.trim()).replace(/^#/, '');
       if (!q) return true;
+      // An exact table name ("VIP 1") means that table only, not "SVIP 1".
+      const exactTable = KNOWN_TABLES.find((t) => fold(t) === q);
+      if (exactTable) return tableOf(order).table === exactTable;
       const hay = [
         shortCode(order.id).slice(1), order.table_name || 'walk-in / bar', order.notes || '',
         (order.items || []).map((i) => i.name).join(' '),
-      ].join(' ').toLowerCase();
-      return hay.indexOf(q) !== -1;
+      ].join(' ');
+      return fold(hay).indexOf(q) !== -1;
     }
     $('order-search').addEventListener('input', (e) => { searchTerm = e.target.value; renderView(); });
     $('order-search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; searchTerm = ''; renderView(); } });
@@ -531,35 +557,110 @@
       }
     }
 
-    function renderDashboard() {
-      const fulfilled = ordersData.filter((o) => o.status === 'fulfilled');
-      const sum = (list) => list.reduce((s, o) => s + (o.total_amount || 0), 0);
-      const totalRevenue = sum(fulfilled);
-      const ordersCount = fulfilled.length;
+    // ---------------- DASHBOARD ----------------
+    // Tables in the POS dropdown. table_name is "SVIP 1", "SVIP 1 · Ana", "Ana" (walk-in) or empty.
+    const KNOWN_TABLES = ['SVIP 1', 'SVIP 2', 'SVIP 3', 'SVIP 4', 'SVIP 5', 'VIP 1', 'VIP 2', 'VIP 3', 'VIP 4', 'Table 1', 'Table 2', 'Table 3', 'Table 4'];
+    const WALK_IN = 'Walk-in / Bar';
+    function tableOf(order) {
+      const raw = String(order.table_name || '').trim();
+      const parts = raw.split(' · ');
+      const first = parts[0].trim();
+      const known = KNOWN_TABLES.find((t) => t.toLowerCase() === first.toLowerCase());
+      if (known) return { table: known, guest: parts.slice(1).join(' · ').trim() };
+      return { table: WALK_IN, guest: raw };
+    }
 
-      $('dash-revenue').textContent = peso(totalRevenue);
-      $('dash-cash-revenue').textContent = peso(sum(fulfilled.filter((o) => o.payment_method === 'cash')));
-      $('dash-gcash-revenue').textContent = peso(sum(fulfilled.filter((o) => o.payment_method === 'gcash')));
-      $('dash-orders').textContent = ordersCount;
-      $('dash-aov').textContent = peso(ordersCount ? Math.round(totalRevenue / ordersCount) : 0);
+    function periodHours() { return parseInt($('dash-period').value, 10) || 0; }
+    function periodLabel() { return $('dash-period').selectedOptions[0].textContent.toLowerCase(); }
+    function inPeriod(list) {
+      const h = periodHours();
+      if (!h) return list;
+      const since = Date.now() - h * 3600 * 1000;
+      return list.filter((o) => new Date(o.created_at).getTime() >= since);
+    }
+    $('dash-period').addEventListener('change', renderView);
 
-      const itemStats = {};
-      fulfilled.forEach((order) => {
-        (order.items || []).forEach((item) => {
-          const s = itemStats[item.name] || (itemStats[item.name] = { qty: 0, revenue: 0 });
-          s.qty += item.qty;
-          s.revenue += item.qty * (item.price || 0);
-        });
+    function summarise(list) {
+      const fulfilled = list.filter((o) => o.status === 'fulfilled');
+      const sum = (l) => l.reduce((s, o) => s + (o.total_amount || 0), 0);
+      const items = {};
+      // Group by menu id, so a renamed item (e.g. "J\u00e4germeister" -> "Jagermeister") stays one row.
+      fulfilled.forEach((o) => (o.items || []).forEach((it) => {
+        const key = it.id || fold(it.name);
+        const s = items[key] || (items[key] = { name: it.name, qty: 0, revenue: 0 });
+        if (fold(it.name) === it.name.toLowerCase()) s.name = it.name;   // prefer the plain spelling
+        s.qty += it.qty || 0;
+        s.revenue += (it.qty || 0) * (it.price || 0);
+      }));
+      const tables = {};
+      list.forEach((o) => {
+        const { table, guest } = tableOf(o);
+        const t = tables[table] || (tables[table] = { table, served: 0, total: 0, cash: 0, gcash: 0, waiting: 0, waitingTotal: 0, guests: new Set() });
+        if (guest) t.guests.add(guest);
+        if (o.status === 'fulfilled') {
+          t.served++; t.total += o.total_amount || 0;
+          if (o.payment_method === 'cash') t.cash += o.total_amount || 0;
+          if (o.payment_method === 'gcash') t.gcash += o.total_amount || 0;
+        } else if (o.status === 'sent') {
+          t.waiting++; t.waitingTotal += o.total_amount || 0;
+        }
       });
-      const sortedItems = Object.entries(itemStats)
-        .map(([name, s]) => ({ name, qty: s.qty, revenue: s.revenue }))
-        .sort((a, b) => b.qty - a.qty);
+      return {
+        fulfilled,
+        total: sum(fulfilled),
+        cash: sum(fulfilled.filter((o) => o.payment_method === 'cash')),
+        gcash: sum(fulfilled.filter((o) => o.payment_method === 'gcash')),
+        cancelled: list.filter((o) => o.status === 'cancelled'),
+        waiting: list.filter((o) => o.status === 'sent'),
+        items: Object.values(items).sort((a, b) => b.qty - a.qty),
+        tables: Object.values(tables).sort((a, b) => b.total - a.total || b.waiting - a.waiting),
+      };
+    }
 
-      if (!sortedItems.length) {
-        $('dash-top-items').innerHTML = '<div class="text-brand-muted text-xs md:text-sm italic text-center md:text-left">No items fulfilled yet.</div>';
+    function renderDashboard() {
+      const list = inPeriod(ordersData);
+      const s = summarise(list);
+      const count = s.fulfilled.length;
+
+      // The bar loads the newest 500 orders; say so if the chosen period may reach further back.
+      const oldest = ordersData.length ? Math.min.apply(null, ordersData.map((o) => new Date(o.created_at).getTime())) : 0;
+      const h = periodHours();
+      const truncated = ordersData.length >= 500 && (!h || oldest > Date.now() - h * 3600 * 1000);
+      $('dash-scope').textContent = list.length + ' orders · ' + periodLabel() + (truncated ? ' · showing newest 500 — Export includes all' : '');
+
+      $('dash-revenue').textContent = peso(s.total);
+      $('dash-cash-revenue').textContent = peso(s.cash);
+      $('dash-gcash-revenue').textContent = peso(s.gcash);
+      $('dash-orders').textContent = count;
+      $('dash-aov').textContent = peso(count ? Math.round(s.total / count) : 0);
+
+      $('dash-tables').innerHTML = s.tables.length ? s.tables.map((t) => `
+        <button type="button" data-table="${esc(t.table)}" class="w-full text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-brand-gold/40 transition-colors">
+          <div class="min-w-0">
+            <div class="text-brand-ice text-sm md:text-base">${esc(t.table)}</div>
+            <div class="text-brand-muted text-[11px] truncate">${t.guests.size ? esc(Array.from(t.guests).join(', ')) : '&nbsp;'}</div>
+          </div>
+          <div class="flex items-center gap-4 md:gap-6 font-mono text-xs">
+            <div class="text-right"><div class="text-[9px] text-brand-muted uppercase tracking-widest">Orders</div><div class="text-brand-ice">${t.served}${t.waiting ? ' <span class="text-amber-300">+' + t.waiting + ' waiting</span>' : ''}</div></div>
+            <div class="text-right hidden sm:block"><div class="text-[9px] text-green-400 uppercase tracking-widest">Cash</div><div class="text-brand-ice">${peso(t.cash)}</div></div>
+            <div class="text-right hidden sm:block"><div class="text-[9px] text-blue-400 uppercase tracking-widest">GCash</div><div class="text-brand-ice">${peso(t.gcash)}</div></div>
+            <div class="text-right w-24"><div class="text-[9px] text-brand-muted uppercase tracking-widest">Spent</div><div class="text-brand-gold text-sm">${peso(t.total)}</div></div>
+          </div>
+        </button>`).join('')
+        : '<div class="text-brand-muted text-xs md:text-sm italic">No orders in this period.</div>';
+      $('dash-tables').querySelectorAll('[data-table]').forEach((b) => b.addEventListener('click', () => {
+        // Show that table's served orders, using the search box.
+        const t = b.getAttribute('data-table');
+        $('order-search').value = t === WALK_IN ? '' : t;
+        searchTerm = $('order-search').value;
+        document.querySelector('.status-tab[data-tab="fulfilled"]').click();
+      }));
+
+      if (!s.items.length) {
+        $('dash-top-items').innerHTML = '<div class="text-brand-muted text-xs md:text-sm italic text-center md:text-left">No items served in this period.</div>';
         return;
       }
-      $('dash-top-items').innerHTML = sortedItems.map((item, index) => `
+      $('dash-top-items').innerHTML = s.items.map((item, index) => `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 gap-3 sm:gap-0">
           <div class="flex items-center gap-3 md:gap-4">
             <div class="font-mono text-brand-gold/50 text-xs md:text-sm w-4">${index + 1}.</div>
@@ -578,6 +679,72 @@
         </div>
       `).join('');
     }
+
+    // ---------------- EXCEL EXPORT ----------------
+    // Fetches up to 5000 orders (not just the 500 the screen polls) for the chosen period.
+    $('dash-export').addEventListener('click', async () => {
+      if (!window.XLSX) { alert('The Excel library has not loaded yet. Check the connection and try again.'); return; }
+      const btn = $('dash-export');
+      btn.disabled = true; btn.textContent = 'Preparing…';
+      try {
+        const all = await apiFetch('/api/orders?limit=5000');
+        const list = inPeriod(Array.isArray(all) ? all : []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        if (!list.length) { alert('No orders in this period.'); return; }
+        const s = summarise(list);
+        const when = (iso) => new Date(iso).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const statusName = { sent: 'Waiting', fulfilled: 'Served', cancelled: 'Cancelled', held: 'Held' };
+
+        const summary = [
+          ['EXCLUSIVES PH — BAR SALES'],
+          ['Period', $('dash-period').selectedOptions[0].textContent],
+          ['From', when(list[0].created_at)],
+          ['To', when(list[list.length - 1].created_at)],
+          ['Exported', when(new Date().toISOString())],
+          [],
+          ['', 'Orders', 'Amount (PHP)'],
+          ['Served — cash', s.fulfilled.filter((o) => o.payment_method === 'cash').length, s.cash],
+          ['Served — GCash', s.fulfilled.filter((o) => o.payment_method === 'gcash').length, s.gcash],
+          ['Served — other / unpaid', s.fulfilled.filter((o) => o.payment_method !== 'cash' && o.payment_method !== 'gcash').length, s.total - s.cash - s.gcash],
+          ['Served — TOTAL', s.fulfilled.length, s.total],
+          [],
+          ['Still waiting (not served)', s.waiting.length, s.waiting.reduce((t, o) => t + (o.total_amount || 0), 0)],
+          ['Cancelled', s.cancelled.length, s.cancelled.reduce((t, o) => t + (o.total_amount || 0), 0)],
+          ['GCash orders without receipt photo', list.filter((o) => o.payment_method === 'gcash' && o.status !== 'cancelled' && !o.receipt_url).length],
+        ];
+
+        const orderRows = [['Code', 'Time', 'Table', 'Guest', 'Items', 'Total (PHP)', 'Payment', 'Status', 'Receipt', 'Notes']].concat(list.map((o) => {
+          const t = tableOf(o);
+          return [shortCode(o.id), when(o.created_at), t.table, t.guest,
+            (o.items || []).map((i) => i.qty + 'x ' + i.name).join(', '), o.total_amount || 0,
+            o.payment_method || '', statusName[o.status] || o.status, o.receipt_url || '', o.notes || ''];
+        }));
+
+        const tableRows = [['Table', 'Guests', 'Served orders', 'Cash (PHP)', 'GCash (PHP)', 'Total served (PHP)', 'Waiting orders', 'Waiting (PHP)']]
+          .concat(s.tables.map((t) => [t.table, Array.from(t.guests).join(', '), t.served, t.cash, t.gcash, t.total, t.waiting, t.waitingTotal]));
+
+        const itemRows = [['Item', 'Qty served', 'Sales (PHP)']].concat(s.items.map((i) => [i.name, i.qty, i.revenue]));
+
+        const wb = XLSX.utils.book_new();
+        const add = (rows, name, widths) => {
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          ws['!cols'] = widths.map((w) => ({ wch: w }));
+          XLSX.utils.book_append_sheet(wb, ws, name);
+        };
+        add(summary, 'Summary', [34, 12, 16]);
+        add(orderRows, 'Orders', [8, 20, 12, 16, 50, 12, 9, 10, 40, 30]);
+        add(tableRows, 'Per table', [14, 30, 14, 12, 12, 18, 14, 14]);
+        add(itemRows, 'Items', [32, 12, 14]);
+
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        XLSX.writeFile(wb, `ExclusivesPH_Bar_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.xlsx`);
+        showToast('Exported ' + list.length + ' orders');
+      } catch (err) {
+        if (!err.isAuth) alert('Export failed: ' + err.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Export Excel';
+      }
+    });
 
     const BTN = 'py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors disabled:opacity-40';
 
