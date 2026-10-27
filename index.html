@@ -38,6 +38,9 @@
 </head>
 <body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen">
 
+  <!-- Connection status: shown only when the server is slow/unreachable or the device is offline -->
+  <div id="net-banner" class="hidden fixed top-0 inset-x-0 z-[60] text-center font-mono text-xs tracking-wider px-4 py-2" role="status" aria-live="polite"></div>
+
   <!-- ================= LOGIN GATE ================= -->
   <div id="gate" class="min-h-screen flex items-center justify-center px-6">
     <div class="w-full max-w-md bg-brand-slate border border-white/5 rounded-3xl p-10">
@@ -53,6 +56,7 @@
              class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-base px-4 py-4 outline-none mb-6">
       <button id="login-btn" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Log in</button>
       <p id="gate-error" class="text-red-400 text-sm font-mono mt-4 hidden"></p>
+      <p id="gate-info" class="text-amber-300 text-sm font-mono mt-4 hidden"></p>
     </div>
   </div>
 
@@ -128,10 +132,11 @@
         <div class="bg-brand-slate border border-white/5 rounded-3xl p-5">
           <label class="block font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-2">Code or Guest Name</label>
           <div class="flex gap-3">
-            <input id="manual-code" type="text" placeholder="EXC-XXXXXX or Name"
+            <input id="manual-code" type="text" placeholder="EXC-XXXXXX or Name" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search"
                    class="flex-1 bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice font-mono text-base px-4 py-4 outline-none">
             <button id="manual-go" class="font-mono text-xs tracking-widest uppercase rounded-xl px-6 bg-brand-gold text-brand-obsidian font-bold hover:bg-brand-ice transition-colors">Find</button>
           </div>
+          <p class="font-mono text-[10px] text-brand-muted mt-2">Ticket code with or without "EXC-", or at least 2 letters of a name.</p>
         </div>
       </div>
 
@@ -199,6 +204,10 @@
           <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-3">Main Deck</div>
           <div id="deck-main" class="bg-brand-slate border border-white/5 rounded-3xl p-3 md:p-5"></div>
         </div>
+        <div id="deck-other-wrap" class="hidden">
+          <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-3">Other Tables</div>
+          <div id="deck-other" class="bg-brand-slate border border-white/5 rounded-3xl p-3 md:p-5 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+        </div>
       </div>
 
       <!-- LIST VIEW -->
@@ -249,11 +258,119 @@
     var sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
     var $ = function (id) { return document.getElementById(id); };
 
-    // Strict Exclusives PH ticket format (EXC-XXXXXX)
-    var TICKET_REGEX = /^EXC-[A-F0-9]{6}$/i;
+    // ---------------- TICKET CODES ----------------
+    // Tickets look like EXC-A1B2C3. Accept "exc a1b2c3", "EXCA1B2C3", a QR payload that
+    // contains the code, or the bare 6 characters (only if it has a digit, so names
+    // like "Becca" are never mistaken for a code).
+    var TICKET_FIND = /EXC[-\s]?([A-F0-9]{6})(?![A-F0-9])/i;
+    function extractTicketCode(text) {
+      var t = String(text || '').trim();
+      var m = t.match(TICKET_FIND);
+      if (m) return 'EXC-' + m[1].toUpperCase();
+      if (/^[A-F0-9]{6}$/i.test(t) && /\d/.test(t)) return 'EXC-' + t.toUpperCase();
+      return null;
+    }
 
-    function isValidTicketCode(code) {
-      return TICKET_REGEX.test((code || '').trim());
+    // ---------------- PACKAGE PERKS ----------------
+    // Mirrors PACKAGE_TIER_CONFIG in the backend's email_module.py: what each package
+    // gets at the door. Keyed by package (not table) so it can't drift from the emails.
+    var PERKS = {
+      'SVIP Couch':          { tone: 'svip',  title: 'SVIP',              line: '2 complimentary bottles + 1 food item + 8 in-cans' },
+      'Indoor Couch':        { tone: 'vip',   title: 'VIP',               line: '1 complimentary bottle + 1 food item + 4 in-cans' },
+      'Outdoor Couch':       { tone: 'vip',   title: 'VIP',               line: '1 complimentary bottle + 1 food item + 4 in-cans' },
+      '6-Pax Bottle Bundle': { tone: 'vip',   title: 'Bottle bundle',     line: '1 complimentary bottle' },
+      'Standing Table':      { tone: 'plain', title: 'Standing table',    line: 'Table only &mdash; no complimentary bottle or food' },
+      'Entrance Fee':        { tone: 'plain', title: 'Entrance',          line: 'Entrance only &mdash; no complimentary bottle or food' }
+    };
+
+    // ---------------- NETWORK ----------------
+    // The backend sleeps when idle and can take up to a minute to wake, so requests get a
+    // generous timeout and a visible "waking up" banner instead of silently hanging.
+    var REQUEST_TIMEOUT_MS = 60000;
+    var SLOW_AFTER_MS = 5000;
+    var pendingRequests = 0, slowRequests = 0, lastNetError = false;
+
+    function setBanner(kind, text) {
+      var el = $('net-banner');
+      if (!kind) { el.classList.add('hidden'); return; }
+      var tones = {
+        slow:    'bg-amber-400 text-brand-obsidian',
+        down:    'bg-red-500 text-white',
+        offline: 'bg-red-500 text-white'
+      };
+      el.className = 'fixed top-0 inset-x-0 z-[60] text-center font-mono text-xs tracking-wider px-4 py-2 ' + tones[kind];
+      el.textContent = text;
+    }
+    function refreshBanner() {
+      if (!navigator.onLine) return setBanner('offline', 'You are offline \u2014 check Wi-Fi or mobile data.');
+      if (slowRequests > 0) return setBanner('slow', 'Server is waking up \u2014 this can take up to a minute\u2026');
+      if (lastNetError) return setBanner('down', 'Connection problem \u2014 will keep retrying. Last action may not have saved.');
+      setBanner(null);
+    }
+
+    function AuthError() { this.isAuth = true; this.message = 'Session expired.'; }
+
+    async function api(path, opts) {
+      opts = opts || {};
+      var headers = Object.assign({}, await authHeader(), opts.headers || {});
+      var ctrl = new AbortController();
+      var isSlow = false;
+      var timer = setTimeout(function () { ctrl.abort(); }, REQUEST_TIMEOUT_MS);
+      var slowTimer = setTimeout(function () { isSlow = true; slowRequests++; refreshBanner(); }, SLOW_AFTER_MS);
+      pendingRequests++;
+      try {
+        var res = await fetch(API_BASE + path, Object.assign({}, opts, { headers: headers, signal: ctrl.signal }));
+        lastNetError = false;
+        if (res.status === 401) { sessionExpired(); throw new AuthError(); }
+        return res;
+      } catch (e) {
+        if (e && e.isAuth) throw e;
+        lastNetError = true;
+        throw new Error(e && e.name === 'AbortError'
+          ? 'The server took too long to respond. Try again.'
+          : 'Could not reach the server. Check the connection and try again.');
+      } finally {
+        clearTimeout(timer); clearTimeout(slowTimer);
+        if (isSlow) slowRequests--;
+        pendingRequests--;
+        refreshBanner();
+      }
+    }
+    async function errorDetail(res, fallback) {
+      var d = await res.json().catch(function () { return {}; });
+      return (d && typeof d.detail === 'string' && d.detail) || fallback;
+    }
+    window.addEventListener('online', refreshBanner);
+    window.addEventListener('offline', refreshBanner);
+
+    // ---------------- FEEDBACK ----------------
+    // Short vibration + beep so door staff don't have to look at the screen for every scan.
+    var audioCtx = null;
+    function unlockAudio() {
+      try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {}
+    }
+    function feedback(kind) {
+      try { if (navigator.vibrate) navigator.vibrate(kind === 'good' ? 80 : [120, 80, 120]); } catch (e) {}
+      try {
+        if (!audioCtx) return;
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = kind === 'good' ? 880 : 220;
+        g.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(); o.stop(audioCtx.currentTime + 0.25);
+      } catch (e) {}
+    }
+
+    // ---------------- KEEP SCREEN ON ----------------
+    var wakeLock = null;
+    async function keepScreenOn() {
+      try {
+        if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', function () { wakeLock = null; });
+        }
+      } catch (e) {}
     }
 
     // Clock
@@ -272,8 +389,24 @@
       return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
 
-    function showApp() { $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); }
-    function showGate() { $('app').classList.add('hidden'); $('gate').classList.remove('hidden'); }
+    var appVisible = false;
+    function showApp() {
+      appVisible = true;
+      $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
+      $('gate-info').classList.add('hidden');
+      keepScreenOn();
+    }
+    function showGate(info) {
+      appVisible = false;
+      $('app').classList.add('hidden'); $('gate').classList.remove('hidden');
+      var el = $('gate-info');
+      if (info) { el.textContent = info; el.classList.remove('hidden'); } else { el.classList.add('hidden'); }
+    }
+    function sessionExpired() {
+      if (!appVisible) return;
+      stopCamera();
+      showGate('Your session expired. Please log in again.');
+    }
 
     async function doLogin() {
       var err = $('gate-error');
@@ -289,8 +422,7 @@
           err.classList.remove('hidden');
         } else {
           showApp();
-          loadTables();
-          loadSummary();
+          refreshAll();
         }
       } catch (e) {
         err.textContent = 'Could not reach the auth server.';
@@ -301,22 +433,26 @@
     }
     $('login-btn').addEventListener('click', doLogin);
     $('password').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+    $('email').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('password').focus(); });
 
     $('logout-btn').addEventListener('click', async function () {
       await sb.auth.signOut();
+      cameraWanted = false;
       stopCamera();
       showGate();
     });
 
     sb.auth.getSession().then(function (s) {
-      if (s && s.data && s.data.session) { showApp(); loadTables(); loadSummary(); }
+      if (s && s.data && s.data.session) { showApp(); refreshAll(); }
       else { showGate(); }
     });
 
     // ---------------- TABS ----------------
+    var currentTab = 'scan';
     document.querySelectorAll('.tab-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var tab = btn.getAttribute('data-tab');
+        currentTab = tab;
         document.querySelectorAll('.tab-btn').forEach(function (b) {
           var on = b === btn;
           b.classList.toggle('active-tab', on);
@@ -337,9 +473,13 @@
     var html5Qr = null;
     var scanning = false;
     var lastScan = 0;
+    var lastScanText = '';
+    var cameraWanted = false;   // staff were using the camera, so reopen it after each guest
 
     async function startCamera() {
       if (scanning) return;
+      unlockAudio();
+      cameraWanted = true;
       $('reader').textContent = '';
       html5Qr = new Html5Qrcode('reader');
       try {
@@ -353,8 +493,15 @@
         $('cam-start').classList.add('hidden');
         $('cam-stop').classList.remove('hidden');
       } catch (e) {
-        $('reader').textContent = 'Camera unavailable — use manual entry.';
+        var msg = String((e && (e.name || e.message)) || e);
+        var why = /NotAllowed|Permission/i.test(msg) ? 'Camera permission was denied. Allow camera access for this site in the browser settings, then tap Start camera again.'
+                : /NotFound|Overconstrained/i.test(msg) ? 'No camera found on this device.'
+                : /NotReadable|TrackStart/i.test(msg) ? 'The camera is being used by another app. Close it and try again.'
+                : !window.isSecureContext ? 'The camera only works on an https:// address.'
+                : 'Camera unavailable.';
+        $('reader').textContent = why + ' You can still type a ticket code or name below.';
         html5Qr = null;
+        cameraWanted = false;
       }
     }
 
@@ -370,33 +517,38 @@
     }
 
     function onScan(decodedText) {
+      var raw = (decodedText || '').trim();
+      if (!raw) return;
       var now = Date.now();
-      if (now - lastScan < 2500) return;
-      lastScan = now;
-      var code = (decodedText || '').trim();
-      if (!code) return;
+      // Ignore the same QR held in front of the camera, and rapid repeat reads.
+      if (now - lastScan < 2500 || (raw === lastScanText && now - lastScan < 6000)) return;
+      lastScan = now; lastScanText = raw;
 
-      // 1. FILTER INVALID / EXTERNAL QR CODES LOCALLY
-      if (!isValidTicketCode(code)) {
-        renderInvalidFormat(code);
+      var code = extractTicketCode(raw);
+      if (!code) {
+        feedback('bad');
+        renderInvalidFormat(raw);
         return;
       }
-
-      // 2. Valid format -> proceed with lookup
       stopCamera();
       lookup(code);
     }
 
     $('cam-start').addEventListener('click', startCamera);
-    $('cam-stop').addEventListener('click', stopCamera);
+    $('cam-stop').addEventListener('click', function () { cameraWanted = false; stopCamera(); });
 
     // ---------------- MANUAL ENTRY / NAME SEARCH ----------------
     function handleManualSubmit() {
       var input = $('manual-code').value.trim();
       if (!input) return;
-
-      if (isValidTicketCode(input)) {
-        lookup(input);
+      unlockAudio();
+      var code = extractTicketCode(input);
+      if (code) {
+        lookup(code);
+      } else if (input.length < 2) {
+        showResultBox();
+        $('result').className = 'border border-amber-400/50 rounded-3xl p-6 bg-brand-slate text-center';
+        $('result').innerHTML = '<div class="font-mono text-sm text-amber-300">Type at least 2 letters of a name, or the 6-character ticket code.</div>';
       } else {
         searchByName(input);
       }
@@ -424,39 +576,48 @@
         '<div class="font-mono text-xs text-amber-300/80">Valid tickets start with EXC- (e.g. EXC-A1B2C3)</div>';
     }
 
-    async function lookup(code) {
-      var box = $('result');
+    function renderError(message) {
       showResultBox();
+      var box = $('result');
+      box.className = 'border border-red-400/40 rounded-3xl p-6 bg-brand-slate text-center';
+      box.innerHTML = '<div class="text-red-300 text-sm font-mono py-4">' + esc(message) + '</div>' +
+        '<button id="retry-btn" class="font-mono text-[11px] tracking-widest uppercase text-brand-gold border border-brand-gold/40 rounded-full px-5 py-2 hover:bg-brand-goldDim transition-colors">Try again</button>';
+      return $('retry-btn');
+    }
+
+    function renderLoading(text) {
+      showResultBox();
+      var box = $('result');
       box.className = 'border border-white/10 rounded-3xl p-6 bg-brand-slate';
-      box.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-6">Looking up ' + esc(code) + '\u2026</div>';
+      box.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-6">' + esc(text) + '</div>';
+    }
+
+    async function lookup(code) {
+      renderLoading('Looking up ' + code + '…');
       try {
-        var headers = await authHeader();
-        var res = await fetch(API_BASE + '/api/reception/lookup/' + encodeURIComponent(code.toUpperCase()), { headers: headers });
-        if (res.status === 401) { showGate(); return; }
-        if (res.status === 404) { renderNotFound(code); return; }
-        if (!res.ok) throw new Error('Lookup failed.');
+        var res = await api('/api/reception/lookup/' + encodeURIComponent(code.toUpperCase()));
+        if (res.status === 404) { feedback('bad'); renderNotFound(code); return; }
+        if (!res.ok) throw new Error(await errorDetail(res, 'Lookup failed. Try again.'));
         var b = await res.json();
+        feedback(b.status === 'confirmed' && !b.checked_in ? 'good' : 'bad');
         renderResult(b);
       } catch (e) {
-        box.className = 'border border-red-400/40 rounded-3xl p-6 bg-brand-slate';
-        box.innerHTML = '<div class="text-center text-red-300 text-sm font-mono py-6">Could not reach the server. Try again.</div>';
+        if (e.isAuth) return;
+        feedback('bad');
+        renderError(e.message).addEventListener('click', function () { lookup(code); });
       }
     }
 
     async function searchByName(query) {
-      var box = $('result');
-      showResultBox();
-      box.className = 'border border-white/10 rounded-3xl p-6 bg-brand-slate';
-      box.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-6">Searching for "' + esc(query) + '"\u2026</div>';
+      renderLoading('Searching for "' + query + '"…');
       try {
-        var headers = await authHeader();
-        var res = await fetch(API_BASE + '/api/reception/search?q=' + encodeURIComponent(query), { headers: headers });
-        if (res.status === 401) { showGate(); return; }
-        if (!res.ok) throw new Error('Search failed.');
+        var res = await api('/api/reception/search?q=' + encodeURIComponent(query));
+        if (!res.ok) throw new Error(await errorDetail(res, 'Search failed. Try again.'));
         var data = await res.json();
         var results = data.results || [];
 
         if (results.length === 0) {
+          feedback('bad');
           renderNotFound(query);
         } else if (results.length === 1) {
           renderResult(results[0]);
@@ -464,202 +625,265 @@
           renderSearchResults(results, query);
         }
       } catch (e) {
-        box.className = 'border border-red-400/40 rounded-3xl p-6 bg-brand-slate';
-        box.innerHTML = '<div class="text-center text-red-300 text-sm font-mono py-6">Could not perform name search. Try again.</div>';
+        if (e.isAuth) return;
+        renderError(e.message).addEventListener('click', function () { searchByName(query); });
       }
+    }
+
+    function statusBadge(g) {
+      if (g.status !== 'confirmed') {
+        return '<span class="font-mono text-[10px] tracking-widest uppercase text-red-300 border border-red-400/40 rounded-full px-3 py-1 shrink-0">' + esc(g.status) + '</span>';
+      }
+      if (g.checked_in) {
+        return '<span class="font-mono text-[10px] tracking-widest uppercase text-emerald-300 border border-emerald-400/40 rounded-full px-3 py-1 shrink-0">On board</span>';
+      }
+      return '<span class="font-mono text-[10px] tracking-widest uppercase text-brand-muted border border-white/20 rounded-full px-3 py-1 shrink-0">Not yet arrived</span>';
+    }
+
+    function spotLabel(tableId) {
+      return tableId ? spotName(tableId) + ' (' + tableId + ')' : 'General Admission';
     }
 
     function renderSearchResults(results, query) {
       var box = $('result');
       box.className = 'border border-brand-gold/40 rounded-3xl p-6 bg-brand-slate';
-      
-      var rows = results.map(function(r) {
-        var spotText = r.table_id ? spotName(r.table_id) + ' (' + r.table_id + ')' : 'General Admission';
-        return '<div class="search-item p-4 bg-brand-obsidian/40 border border-white/5 rounded-2xl hover:border-brand-gold cursor-pointer transition-colors mb-3 last:mb-0" data-code="' + esc(r.ticket_code) + '">' +
-          '<div class="flex items-center justify-between">' +
-            '<div>' +
-              '<div class="text-brand-ice font-serif text-lg">' + esc(r.full_name) + '</div>' +
-              '<div class="text-brand-muted font-mono text-xs mt-0.5">' + esc(r.package) + ' &middot; ' + esc(spotText) + '</div>' +
+
+      var rows = results.map(function (r, i) {
+        return '<button type="button" class="search-item w-full text-left p-4 bg-brand-obsidian/40 border border-white/5 rounded-2xl hover:border-brand-gold transition-colors mb-3 last:mb-0" data-i="' + i + '">' +
+          '<div class="flex items-center justify-between gap-3">' +
+            '<div class="min-w-0">' +
+              '<div class="text-brand-ice font-serif text-lg truncate">' + esc(r.full_name) + '</div>' +
+              '<div class="text-brand-muted font-mono text-xs mt-0.5">' + esc(r.package) + ' &middot; ' + esc(spotLabel(r.table_id)) + ' &middot; ' + esc(r.guests) + ' pax</div>' +
+              (r.ticket_code ? '<div class="text-brand-gold font-mono text-[11px] mt-0.5">' + esc(r.ticket_code) + '</div>' : '') +
             '</div>' +
-            '<div class="text-right">' +
-              '<div class="text-brand-gold font-mono text-xs font-bold">' + esc(r.ticket_code) + '</div>' +
-              '<div class="text-brand-muted font-mono text-[10px]">' + r.guests + ' pax</div>' +
-            '</div>' +
+            statusBadge(r) +
           '</div>' +
-        '</div>';
+        '</button>';
       }).join('');
 
-      box.innerHTML = 
-        '<div class="font-mono text-xs tracking-widest text-brand-gold uppercase mb-3">Found ' + results.length + ' matches for "' + esc(query) + '"</div>' +
-        '<div class="max-h-80 overflow-y-auto pr-1">' + rows + '</div>';
+      box.innerHTML =
+        '<div class="font-mono text-xs tracking-widest text-brand-gold uppercase mb-3">' + results.length + ' matches for "' + esc(query) + '" &mdash; tap one</div>' +
+        '<div class="max-h-[28rem] overflow-y-auto pr-1">' + rows + '</div>';
 
-      box.querySelectorAll('.search-item').forEach(function(el) {
-        el.addEventListener('click', function() {
-          var code = el.getAttribute('data-code');
-          if (code) lookup(code);
+      box.querySelectorAll('.search-item').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var r = results[parseInt(el.getAttribute('data-i'), 10)];
+          // Bookings without a ticket (e.g. still pending) can't be looked up by code; show what we have.
+          if (r.ticket_code) lookup(r.ticket_code); else renderResult(r);
         });
       });
     }
 
     function renderNotFound(code) {
+      showResultBox();
       var box = $('result');
       box.className = 'border border-red-400/40 rounded-3xl p-8 bg-brand-slate text-center';
       box.innerHTML =
         '<div class="w-16 h-16 rounded-full border border-red-400 text-red-300 flex items-center justify-center text-3xl mx-auto mb-4">&times;</div>' +
         '<div class="font-serif text-2xl text-brand-ice mb-1">Guest / Ticket not found</div>' +
-        '<div class="font-mono text-sm text-brand-muted">"' + esc(code) + '" is not on the confirmed guestlist.</div>';
+        '<div class="font-mono text-sm text-brand-muted mb-3">"' + esc(code) + '" is not on the guestlist.</div>' +
+        '<div class="font-mono text-xs text-brand-muted">Try part of their name, or check the code on their email.</div>';
     }
 
-    // ---------------- RENDER GUEST CARD & VIP BADGES ----------------
+    // ---------------- RENDER GUEST CARD ----------------
+    function perksBanner(pkg) {
+      var p = PERKS[pkg];
+      if (!p) {
+        return '<div class="bg-brand-obsidian/60 border border-white/10 rounded-2xl p-3 mb-5 text-center">' +
+          '<div class="font-mono text-[11px] text-brand-muted uppercase tracking-widest">' + esc(pkg || 'Unknown package') + ' &mdash; check with admin for perks</div></div>';
+      }
+      var styles = {
+        svip:  ['bg-brand-goldDim border-brand-gold', 'text-brand-gold'],
+        vip:   ['bg-cyan-400/10 border-cyan-400/40', 'text-cyan-300'],
+        plain: ['bg-brand-obsidian/60 border-white/10', 'text-brand-muted']
+      }[p.tone];
+      return '<div class="' + styles[0] + ' border rounded-2xl p-4 mb-5 text-center">' +
+        '<div class="font-mono text-xs font-bold ' + styles[1] + ' tracking-widest uppercase mb-1">' + p.title + '</div>' +
+        '<div class="text-brand-ice text-sm font-semibold">' + p.line + '</div>' +
+      '</div>';
+    }
+
     function renderResult(b) {
+      showResultBox();
       var box = $('result');
       var confirmed = b.status === 'confirmed';
-      var already = b.checked_in;
-      var table = b.table_id ? spotName(b.table_id) + ' (' + b.table_id + ')' : 'General Admission';
+      var already = !!b.checked_in;
+      var maxHeads = Math.max(0, parseInt(b.guests, 10) || 0);
 
       var border = confirmed ? (already ? 'border-amber-400/50' : 'border-emerald-400/50') : 'border-red-400/50';
       box.className = 'border ' + border + ' rounded-3xl p-6 md:p-7 bg-brand-slate';
 
-      // --- DYNAMIC TIER / ENTITLEMENT BANNER ---
-      var tid = (b.table_id || '').toUpperCase();
-      var pkg = (b.package || '');
-      var isSVIP = ['LC1','LC2','LC3','LC5','LC6'].indexOf(tid) !== -1 || pkg === 'SVIP Couch';
-      var isVIP = ['LC4','LC7','DC1','DC2','DT1','DT2'].indexOf(tid) !== -1 || ['Indoor Couch','Outdoor Couch','Standing Table'].indexOf(pkg) !== -1;
-
-      var entitlementBanner = '';
-      if (isSVIP) {
-        entitlementBanner = 
-          '<div class="bg-brand-goldDim border border-brand-gold rounded-2xl p-4 mb-5 text-center">' +
-            '<div class="font-mono text-xs font-bold text-brand-gold tracking-widest uppercase mb-1">&starf; SVIP TIER ENTITLEMENT &starf;</div>' +
-            '<div class="text-brand-ice text-sm font-semibold">2 Complimentary Bottles + 1 Food Item</div>' +
-          '</div>';
-      } else if (isVIP) {
-        entitlementBanner = 
-          '<div class="bg-cyan-400/10 border border-cyan-400/40 rounded-2xl p-4 mb-5 text-center">' +
-            '<div class="font-mono text-xs font-bold text-cyan-300 tracking-widest uppercase mb-1">&starf; VIP TIER ENTITLEMENT &starf;</div>' +
-            '<div class="text-brand-ice text-sm font-semibold">1 Complimentary Bottle + 1 Food Item</div>' +
-          '</div>';
-      } else {
-        entitlementBanner = 
-          '<div class="bg-brand-obsidian/60 border border-white/10 rounded-2xl p-3 mb-5 text-center">' +
-            '<div class="font-mono text-[11px] text-brand-muted uppercase tracking-widest">Standard Entrance Pass</div>' +
-          '</div>';
-      }
-
-      var statusBadge, banner = '';
+      var banner = '';
       if (!confirmed) {
-        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-red-300 border border-red-400/40 rounded-full px-3 py-1">' + esc(b.status) + '</span>';
-        banner = '<div class="bg-red-400/10 border border-red-400/30 rounded-xl p-4 text-red-300 text-sm font-mono text-center mb-5">Not confirmed — do not admit. Refer to admin.</div>';
+        banner = '<div class="bg-red-500/15 border border-red-400/50 rounded-xl p-4 text-red-200 text-base font-mono font-bold text-center mb-5">NOT CONFIRMED &mdash; DO NOT ADMIT.<div class="font-normal text-sm mt-1">Status: ' + esc(b.status) + '. Refer to admin.</div></div>';
       } else if (already) {
-        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-amber-300 border border-amber-400/40 rounded-full px-3 py-1">Checked in</span>';
-        var t = b.checked_in_at ? new Date(b.checked_in_at).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'}) : '';
-        banner = '<div class="bg-amber-400/10 border border-amber-400/30 rounded-xl p-4 text-amber-300 text-sm font-mono text-center mb-5">Already checked in' + (t ? ' at ' + t : '') + '. You can update head count below.</div>';
-      } else {
-        statusBadge = '<span class="font-mono text-[10px] tracking-widest uppercase text-emerald-300 border border-emerald-400/40 rounded-full px-3 py-1">Confirmed</span>';
+        var t = b.checked_in_at ? new Date(b.checked_in_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '';
+        banner = '<div class="bg-amber-400/10 border border-amber-400/40 rounded-xl p-4 text-amber-200 text-sm font-mono text-center mb-5">' +
+          '<div class="font-bold text-base">ALREADY CHECKED IN' + (t ? ' AT ' + esc(t) : '') + '</div>' +
+          '<div class="mt-1">' + esc(b.heads_present || 0) + ' of ' + maxHeads + ' already inside. Only update if more of their group has arrived.</div></div>';
       }
 
-      var defaultHeads = (already && b.heads_present) ? b.heads_present : b.guests;
-
-      box.innerHTML =
-        entitlementBanner +
+      var html =
         banner +
-        '<div class="flex items-start justify-between mb-5">' +
-          '<div>' +
-            '<div class="font-serif text-3xl text-brand-ice leading-tight">' + esc(b.full_name) + '</div>' +
-            '<div class="font-mono text-xs tracking-widest text-brand-gold uppercase mt-1">' + esc(b.ticket_code || '') + '</div>' +
-          '</div>' + statusBadge +
+        perksBanner(b.package) +
+        '<div class="flex items-start justify-between gap-3 mb-5">' +
+          '<div class="min-w-0">' +
+            '<div class="font-serif text-3xl text-brand-ice leading-tight break-words">' + esc(b.full_name) + '</div>' +
+            '<div class="font-mono text-xs tracking-widest text-brand-gold uppercase mt-1">' + esc(b.ticket_code || 'No ticket yet') + '</div>' +
+          '</div>' + statusBadge(b) +
         '</div>' +
         '<div class="grid grid-cols-2 gap-3 font-mono text-sm mb-6">' +
           detail('Package', b.package) +
-          detail('Table / Spot', table) +
-          detail('Booked pax', String(b.guests)) +
-          detail('Boarding', 'Manila Yacht Club') +
+          detail('Table / Spot', spotLabel(b.table_id)) +
+          detail('Booked pax', String(maxHeads)) +
+          detail('Already inside', String(already ? (b.heads_present || 0) : 0)) +
         '</div>';
 
-      var names = Array.isArray(b.guest_names) ? b.guest_names.filter(function(n){ return String(n).trim(); }) : [];
+      var names = Array.isArray(b.guest_names) ? b.guest_names.filter(function (n) { return String(n).trim(); }) : [];
       if (names.length) {
-        var nameRows = names.map(function (nm, i) {
-          return '<div class="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">' +
-            '<span class="font-mono text-[11px] text-brand-muted w-6">' + (i+1) + '</span>' +
-            '<span class="text-brand-ice text-sm">' + esc(nm) + '</span></div>';
-        }).join('');
-        box.innerHTML +=
+        html +=
           '<div class="bg-brand-obsidian/40 border border-white/5 rounded-2xl p-4 mb-6">' +
-            '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Guest manifest (' + names.length + ')</div>' +
-            nameRows +
+            '<div class="font-mono text-[10px] tracking-widest text-brand-muted uppercase mb-2">Guest names (' + names.length + ')</div>' +
+            names.map(function (nm, i) {
+              return '<div class="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">' +
+                '<span class="font-mono text-[11px] text-brand-muted w-6">' + (i + 1) + '</span>' +
+                '<span class="text-brand-ice text-sm">' + esc(nm) + '</span></div>';
+            }).join('') +
           '</div>';
       }
 
-      if (confirmed) {
-        box.innerHTML +=
+      if (confirmed && b.id) {
+        var start = already ? Math.min(maxHeads, Math.max(1, b.heads_present || 1)) : maxHeads;
+        html +=
           '<div class="border-t border-white/10 pt-6">' +
-            '<div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-4 text-center">Heads present at this table</div>' +
-            '<div class="flex items-center justify-center gap-6 mb-6">' +
-              '<button id="heads-minus" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">&minus;</button>' +
-              '<input id="heads-val" type="number" value="' + defaultHeads + '" min="0" max="' + b.guests + '" class="w-20 bg-transparent text-center font-serif text-5xl text-brand-gold outline-none">' +
-              '<button id="heads-plus" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">+</button>' +
+            '<div class="font-mono text-[11px] tracking-widest text-brand-muted uppercase mb-4 text-center">How many of this group are here now?</div>' +
+            '<div class="flex items-center justify-center gap-6 mb-2">' +
+              '<button id="heads-minus" type="button" aria-label="One fewer" class="w-16 h-16 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">&minus;</button>' +
+              '<input id="heads-val" type="number" inputmode="numeric" value="' + start + '" min="1" max="' + maxHeads + '" class="w-20 bg-transparent text-center font-serif text-5xl text-brand-gold outline-none">' +
+              '<button id="heads-plus" type="button" aria-label="One more" class="w-16 h-16 rounded-full border border-white/15 text-brand-ice text-3xl leading-none hover:border-brand-gold hover:text-brand-gold transition-colors">+</button>' +
             '</div>' +
-            '<button id="checkin-btn" data-id="' + esc(b.id) + '" class="w-full py-5 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">' +
+            '<div class="text-center font-mono text-[11px] text-brand-muted mb-5">of ' + maxHeads + ' booked' +
+              (maxHeads > 1 ? ' &middot; <button id="heads-all" type="button" class="text-brand-gold underline">all ' + maxHeads + '</button>' : '') + '</div>' +
+            '<p id="heads-error" class="hidden text-center text-red-300 font-mono text-xs mb-3"></p>' +
+            '<button id="checkin-btn" type="button" class="w-full py-5 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors disabled:opacity-50">' +
               (already ? 'Update head count' : 'Check in guest') +
             '</button>' +
+            (already ? '<button id="undo-btn" type="button" class="w-full mt-3 py-3 rounded-full border border-red-400/40 text-red-300 font-mono text-[11px] tracking-widest uppercase hover:bg-red-400/10 transition-colors">Undo check-in (wrong guest)</button>' : '') +
           '</div>';
-
-        wireHeads(b.guests);
-        $('checkin-btn').addEventListener('click', function () {
-          checkin(b.id, parseInt($('heads-val').value, 10) || 0);
-        });
       }
+
+      html += '<button id="result-clear" type="button" class="w-full mt-4 py-3 rounded-full border border-white/10 text-brand-muted font-mono text-[11px] tracking-widest uppercase hover:text-brand-ice transition-colors">' +
+        (cameraWanted ? 'Cancel &amp; scan next' : 'Clear') + '</button>';
+
+      box.innerHTML = html;
+      $('result-clear').addEventListener('click', resetForNextGuest);
+
+      if (confirmed && b.id) {
+        wireHeads(maxHeads);
+        var label = already ? 'Update head count' : 'Check in guest';
+        $('checkin-btn').addEventListener('click', function () { checkin(b, label); });
+        if (already) $('undo-btn').addEventListener('click', function () { undoCheckin(b); });
+      }
+    }
+
+    function readHeads(maxHeads) {
+      var n = parseInt($('heads-val').value, 10);
+      if (isNaN(n)) n = 0;
+      return Math.min(maxHeads, Math.max(0, n));
     }
 
     function wireHeads(maxHeads) {
       var val = $('heads-val');
-      $('heads-minus').addEventListener('click', function () {
-        var n = (parseInt(val.value, 10) || 0) - 1; if (n < 0) n = 0; val.value = n;
-      });
-      $('heads-plus').addEventListener('click', function () {
-        var n = (parseInt(val.value, 10) || 0) + 1; if (n > maxHeads) n = maxHeads; val.value = n;
-      });
+      function set(n) {
+        n = Math.min(maxHeads, Math.max(1, n));
+        val.value = n;
+        $('heads-error').classList.add('hidden');
+      }
+      $('heads-minus').addEventListener('click', function () { set(readHeads(maxHeads) - 1); });
+      $('heads-plus').addEventListener('click', function () { set(readHeads(maxHeads) + 1); });
+      if ($('heads-all')) $('heads-all').addEventListener('click', function () { set(maxHeads); });
+      val.addEventListener('blur', function () { set(readHeads(maxHeads)); });
+      val.addEventListener('keydown', function (e) { if (e.key === 'Enter') { set(readHeads(maxHeads)); $('checkin-btn').click(); } });
     }
 
-    async function checkin(id, heads) {
-      var btn = $('checkin-btn');
-      btn.disabled = true; btn.textContent = 'Saving\u2026';
-      try {
-        var headers = await authHeader();
-        headers['Content-Type'] = 'application/json';
-        var res = await fetch(API_BASE + '/api/reception/checkin/' + encodeURIComponent(id), {
-          method: 'POST', headers: headers, body: JSON.stringify({ heads_present: heads })
-        });
-        if (res.status === 401) { showGate(); return; }
-        var data = await res.json().catch(function(){ return {}; });
-        if (!res.ok) throw new Error((data && data.detail) || 'Check-in failed.');
-
-        var box = $('result');
-        box.className = 'border border-emerald-400/60 rounded-3xl p-8 bg-brand-slate text-center';
-        box.innerHTML =
-          '<div class="w-20 h-20 rounded-full border border-emerald-400 text-emerald-300 flex items-center justify-center text-4xl mx-auto mb-5">&check;</div>' +
-          '<div class="font-serif text-3xl text-brand-ice mb-1">' + esc(data.full_name) + '</div>' +
-          '<div class="font-mono text-sm text-brand-muted mb-6">' + (data.table_id ? esc(spotName(data.table_id)) + ' &middot; ' : '') + esc(String(data.heads_present)) + ' seated</div>' +
-          '<button id="scan-again" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">Scan next guest</button>';
-        $('scan-again').addEventListener('click', function () {
-          $('result').classList.add('hidden');
-          $('result-empty').classList.remove('hidden');
-          $('manual-code').value = '';
-        });
-        loadTables();
-        loadSummary();
-      } catch (e) {
-        btn.disabled = false; btn.textContent = 'Check in guest';
-        alert(e.message);
+    var saving = false;
+    async function checkin(b, label) {
+      if (saving) return;
+      var maxHeads = Math.max(0, parseInt(b.guests, 10) || 0);
+      var heads = readHeads(maxHeads);
+      if (heads < 1) {
+        var err = $('heads-error');
+        err.textContent = 'Enter at least 1 person. Use "Undo check-in" if this guest was checked in by mistake.';
+        err.classList.remove('hidden');
+        return;
       }
+      var btn = $('checkin-btn');
+      saving = true; btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        var res = await api('/api/reception/checkin/' + encodeURIComponent(b.id), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heads_present: heads })
+        });
+        if (!res.ok) throw new Error(await errorDetail(res, 'Check-in failed. Try again.'));
+        var data = await res.json();
+        feedback('good');
+        renderCheckedIn(data, b);
+        refreshAll();
+      } catch (e) {
+        if (e.isAuth) return;
+        feedback('bad');
+        if (btn.isConnected) { btn.disabled = false; btn.textContent = label; }
+        var he = $('heads-error');
+        if (he) { he.textContent = e.message + ' Nothing was saved.'; he.classList.remove('hidden'); } else { alert(e.message); }
+      } finally {
+        saving = false;
+      }
+    }
+
+    async function undoCheckin(b) {
+      if (saving) return;
+      if (!confirm('Undo check-in for ' + b.full_name + '?\n\nThis sets them back to "not yet arrived" with 0 people inside.')) return;
+      var btn = $('undo-btn');
+      saving = true; btn.disabled = true; btn.textContent = 'Undoing…';
+      try {
+        var res = await api('/api/reception/checkin/' + encodeURIComponent(b.id) + '/undo', { method: 'POST' });
+        if (!res.ok) throw new Error(await errorDetail(res, 'Could not undo. Try again.'));
+        var data = await res.json();
+        refreshAll();
+        renderResult(Object.assign({}, b, data, { status: b.status, package: b.package, guest_names: b.guest_names }));
+      } catch (e) {
+        if (e.isAuth) return;
+        if (btn.isConnected) { btn.disabled = false; btn.textContent = 'Undo check-in (wrong guest)'; }
+        alert(e.message);
+      } finally {
+        saving = false;
+      }
+    }
+
+    function renderCheckedIn(data, b) {
+      var box = $('result');
+      box.className = 'border border-emerald-400/60 rounded-3xl p-8 bg-brand-slate text-center';
+      box.innerHTML =
+        '<div class="w-20 h-20 rounded-full border border-emerald-400 text-emerald-300 flex items-center justify-center text-4xl mx-auto mb-5">&check;</div>' +
+        '<div class="font-serif text-3xl text-brand-ice mb-1">' + esc(data.full_name) + '</div>' +
+        '<div class="font-mono text-sm text-brand-muted mb-2">' + (data.table_id ? esc(spotName(data.table_id)) + ' &middot; ' : '') + esc(String(data.heads_present)) + ' of ' + esc(String(data.guests)) + ' inside</div>' +
+        (PERKS[b.package] && PERKS[b.package].tone !== 'plain' ? '<div class="font-mono text-xs text-brand-gold mb-6">' + PERKS[b.package].line + '</div>' : '<div class="mb-6"></div>') +
+        '<button id="scan-again" class="w-full py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors">' +
+          (cameraWanted ? 'Scan next guest' : 'Next guest') + '</button>';
+      $('scan-again').addEventListener('click', resetForNextGuest);
+    }
+
+    function resetForNextGuest() {
+      $('result').classList.add('hidden');
+      $('result-empty').classList.remove('hidden');
+      $('manual-code').value = '';
+      if (cameraWanted) startCamera(); else $('manual-code').focus();
     }
 
     // ---------------- DOOR SUMMARY ----------------
     async function loadSummary() {
       try {
-        var headers = await authHeader();
-        var res = await fetch(API_BASE + '/api/reception/summary', { headers: headers });
-        if (res.status === 401) { showGate(); return; }
+        var res = await api('/api/reception/summary');
+        if (!res.ok) return;   // keep showing the last numbers
         var s = await res.json();
         $('sum-present').textContent  = s.present_heads || 0;
         $('sum-expected').textContent = s.expected_heads || 0;
@@ -679,14 +903,14 @@
     var guestsFilter = 'all';
     var guestsQuery = '';
 
-    async function loadGuests() {
+    async function loadGuests(silent) {
       var list = $('guests-list');
-      list.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-8">Loading guests&hellip;</div>';
-      $('guests-empty').classList.add('hidden');
+      if (!silent || !allGuests.length) {
+        list.innerHTML = '<div class="text-center text-brand-muted text-sm font-mono py-8">Loading guests&hellip;</div>';
+        $('guests-empty').classList.add('hidden');
+      }
       try {
-        var headers = await authHeader();
-        var res = await fetch(API_BASE + '/api/reception/guests', { headers: headers });
-        if (res.status === 401) { showGate(); return; }
+        var res = await api('/api/reception/guests');
         if (!res.ok) throw new Error('Failed to load guests.');
         var data = await res.json();
         allGuests = data.guests || [];
@@ -694,7 +918,9 @@
         $('guests-count-checked').textContent = data.checked_in || 0;
         renderGuests();
       } catch (e) {
-        list.innerHTML = '<div class="text-center text-red-300 text-sm font-mono py-8">Could not load guest list.</div>';
+        if (e.isAuth) return;
+        // On a background refresh keep the list we already have; the banner shows the problem.
+        if (!silent || !allGuests.length) list.innerHTML = '<div class="text-center text-red-300 text-sm font-mono py-8">Could not load guest list. Tap Refresh to try again.</div>';
       }
     }
 
@@ -718,7 +944,7 @@
       }
       $('guests-empty').classList.add('hidden');
 
-      list.innerHTML = filtered.map(function (g) {
+      list.innerHTML = filtered.map(function (g, i) {
         var spotText = g.table_id ? spotName(g.table_id) + ' (' + g.table_id + ')' : 'General Admission';
         var confirmed = g.status === 'confirmed';
         var onboard = confirmed && g.checked_in;
@@ -736,7 +962,7 @@
         var headsText = confirmed ? (String(g.heads_present || 0) + ' / ' + g.guests + ' seated') : (g.guests + ' pax');
 
         return '' +
-          '<div class="guest-item bg-brand-slate border ' + accent + ' rounded-2xl p-4 md:p-5 flex items-center justify-between gap-4 cursor-pointer hover:border-brand-gold transition-colors" data-code="' + esc(g.ticket_code || '') + '">' +
+          '<div class="guest-item bg-brand-slate border ' + accent + ' rounded-2xl p-4 md:p-5 flex items-center justify-between gap-4 cursor-pointer hover:border-brand-gold transition-colors" data-i="' + i + '">' +
             '<div class="min-w-0">' +
               '<div class="flex items-center gap-2 flex-wrap">' +
                 '<div class="font-serif text-lg text-brand-ice truncate">' + esc(g.full_name) + '</div>' +
@@ -753,11 +979,10 @@
 
       list.querySelectorAll('.guest-item').forEach(function (el) {
         el.addEventListener('click', function () {
-          var code = el.getAttribute('data-code');
+          var g = filtered[parseInt(el.getAttribute('data-i'), 10)];
           document.querySelector('[data-tab="scan"]').click();
-          if (code) {
-            lookup(code);
-          }
+          if (g.ticket_code) lookup(g.ticket_code); else renderResult(g);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         });
       });
     }
@@ -781,7 +1006,8 @@
     });
 
     // ---------------- DECK LAYOUTS ----------------
-    var SPOT_NAMES = {LC1:'SVIP 1',LC2:'SVIP 2',LC3:'SVIP 3',LC5:'SVIP 4',LC6:'SVIP 5',LC4:'VIP 1',LC7:'VIP 2',DC1:'VIP 3',DC2:'VIP 4',DT1:'Table 1',DT2:'Table 2'};
+    // Mirrors SPOT_DISPLAY_NAMES in the backend's main.py.
+    var SPOT_NAMES = {LC1:'SVIP 1',LC2:'SVIP 2',LC3:'SVIP 3',LC5:'SVIP 4',LC6:'SVIP 5',LC4:'VIP 1',LC7:'VIP 2',DC1:'VIP 3',DC2:'VIP 4',DT1:'Table 1',DT2:'Table 2',DT3:'Table 3',DT4:'Table 4'};
     function spotName(id){ return SPOT_NAMES[id] || id; }
     var DECKS = {
       lower: {
@@ -864,6 +1090,19 @@
       tables.forEach(function (t) { byId[String(t.id).toUpperCase()] = t; });
       $('deck-lower').innerHTML = drawDeck('lower', byId);
       $('deck-main').innerHTML  = drawDeck('main', byId);
+
+      // Any table the deck drawings don't place (e.g. Table 3 / Table 4) still gets a tile.
+      var placed = {};
+      Object.keys(DECKS).forEach(function (k) { DECKS[k].spots.forEach(function (sp) { placed[sp.id] = true; }); });
+      var others = Object.keys(byId).filter(function (id) { return !placed[id]; }).sort();
+      $('deck-other-wrap').classList.toggle('hidden', !others.length);
+      $('deck-other').innerHTML = others.map(function (id) {
+        var t = byId[id];
+        var tone = t.any_checked_in ? 'border-emerald-400 text-emerald-200' : ((t.reserved_by && t.reserved_by.length) ? 'border-brand-gold text-brand-gold' : 'border-white/20 text-brand-muted');
+        var bg = t.any_checked_in ? 'rgba(52,211,153,0.30)' : ((t.reserved_by && t.reserved_by.length) ? 'rgba(245,197,24,0.22)' : 'rgba(10,26,36,0.5)');
+        return '<button type="button" class="deck-spot border-2 ' + tone + ' rounded-xl py-3 font-mono text-sm font-bold" style="background:' + bg + '" data-id="' + esc(id) + '">' +
+          esc(spotName(id)) + ((t.booked_pax || 0) > 0 ? '<div class="font-normal text-xs mt-1">' + (t.seated || 0) + '/' + t.booked_pax + '</div>' : '') + '</button>';
+      }).join('');
       document.querySelectorAll('.deck-spot').forEach(function (g) {
         g.addEventListener('click', function () {
           var id = g.getAttribute('data-id');
@@ -937,12 +1176,13 @@
       }).join('');
     }
 
+    var tablesLoaded = false;
     async function loadTables() {
       try {
-        var headers = await authHeader();
-        var res = await fetch(API_BASE + '/api/reception/tables', { headers: headers });
-        if (res.status === 401) { showGate(); return; }
+        var res = await api('/api/reception/tables');
+        if (!res.ok) throw new Error('Could not load tables.');
         var data = await res.json();
+        tablesLoaded = true;
         var tables = (data && data.tables) || [];
         if (!tables.length) {
           $('tables-empty').classList.remove('hidden');
@@ -952,9 +1192,27 @@
         renderDeckMaps(tables);
         renderTableList(tables);
       } catch (e) {
-        $('tables-list').innerHTML = '<div class="col-span-full text-center text-brand-muted text-sm font-mono py-8">Could not load tables.</div>';
+        if (e.isAuth || tablesLoaded) return;   // keep the last board on a failed background refresh
+        $('tables-list').innerHTML = '<div class="col-span-full text-center text-brand-muted text-sm font-mono py-8">Could not load tables. Tap Refresh to try again.</div>';
       }
     }
+
+    // ---------------- KEEP EVERYTHING FRESH ----------------
+    // Several phones work the door at once, so poll for their check-ins too.
+    var AUTO_REFRESH_MS = 20000;
+    function refreshAll() {
+      if (!appVisible) return;
+      loadSummary();
+      if (currentTab === 'tables') loadTables();
+      if (currentTab === 'guests') loadGuests(true);
+    }
+    setInterval(function () {
+      if (document.visibilityState === 'visible' && pendingRequests === 0) refreshAll();
+    }, AUTO_REFRESH_MS);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') { keepScreenOn(); refreshAll(); }
+    });
+    window.addEventListener('online', refreshAll);
     $('tables-refresh').addEventListener('click', function(){ loadTables(); loadSummary(); });
 
     // Map / List view toggle
