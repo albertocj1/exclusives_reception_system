@@ -149,6 +149,15 @@
           <div class="font-mono text-[10px] md:text-xs tracking-widest uppercase text-brand-muted">Fetching orders...</div>
         </div>
 
+        <!-- Search (order tabs only) -->
+        <div id="search-wrap" class="mb-4 md:mb-6">
+          <div class="relative">
+            <input id="order-search" type="search" autocomplete="off" placeholder="Search code, table, item or note&hellip;  e.g. 01CD, SVIP 1, J&auml;ger"
+                   class="w-full bg-brand-slate border border-white/10 rounded-2xl focus:border-brand-gold text-brand-ice text-sm md:text-base px-5 py-3 outline-none placeholder:text-brand-muted/60">
+          </div>
+          <div id="search-hint" class="hidden mt-2 font-mono text-[11px] tracking-wider text-brand-muted"></div>
+        </div>
+
         <!-- Empty State (For Grids) -->
         <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 md:py-32 text-center">
           <div class="font-serif text-2xl md:text-3xl text-brand-muted/50 mb-3">No orders here.</div>
@@ -492,7 +501,22 @@
     }
 
     // ---------------- UI RENDERING ----------------
+    // ---------------- SEARCH ----------------
+    let searchTerm = '';
+    function matchesSearch(order) {
+      const q = searchTerm.trim().toLowerCase().replace(/^#/, '');
+      if (!q) return true;
+      const hay = [
+        shortCode(order.id).slice(1), order.table_name || 'walk-in / bar', order.notes || '',
+        (order.items || []).map((i) => i.name).join(' '),
+      ].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }
+    $('order-search').addEventListener('input', (e) => { searchTerm = e.target.value; renderView(); });
+    $('order-search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; searchTerm = ''; renderView(); } });
+
     function renderView() {
+      $('search-wrap').classList.toggle('hidden', activeTab === 'dashboard');
       if (activeTab === 'dashboard') {
         $('orders-grid').classList.add('hidden');
         $('empty-state').classList.add('hidden');
@@ -559,8 +583,24 @@
 
     function renderGrid() {
       // Queue: oldest waiting order first. History tabs: most recent first.
+      // Tell staff when the order they're searching for is on another tab.
+      const hint = $('search-hint');
+      if (searchTerm.trim()) {
+        const elsewhere = ['sent', 'fulfilled', 'cancelled'].filter((t) => t !== activeTab).map((t) => {
+          const n = ordersData.filter((o) => o.status === t && matchesSearch(o)).length;
+          return n ? `<button type="button" data-goto="${t}" class="underline text-brand-gold mr-3">${n} in ${{ sent: 'Sent', fulfilled: 'Fulfilled', cancelled: 'Cancelled' }[t]}</button>` : '';
+        }).join('');
+        hint.innerHTML = elsewhere ? 'Also: ' + elsewhere : '';
+        hint.classList.toggle('hidden', !elsewhere);
+        hint.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => {
+          document.querySelector('.status-tab[data-tab="' + b.getAttribute('data-goto') + '"]').click();
+        }));
+      } else {
+        hint.classList.add('hidden');
+      }
+
       const filteredOrders = ordersData
-        .filter((o) => o.status === activeTab)
+        .filter((o) => o.status === activeTab && matchesSearch(o))
         .sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * (activeTab === 'sent' ? 1 : -1));
       const grid = $('orders-grid');
       const empty = $('empty-state');
@@ -568,6 +608,8 @@
       if (!filteredOrders.length) {
         grid.innerHTML = '';
         empty.classList.remove('hidden');
+        empty.querySelector('.font-serif').textContent = searchTerm.trim() ? 'No matching orders here.' : 'No orders here.';
+        empty.querySelector('.font-mono').textContent = searchTerm.trim() ? 'Nothing matches \u201c' + searchTerm.trim() + '\u201d on this tab.' : 'The queue is currently empty.';
         return;
       }
       empty.classList.add('hidden');

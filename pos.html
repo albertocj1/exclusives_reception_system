@@ -147,8 +147,9 @@
       </div>
 
       <div class="flex items-center gap-2 md:gap-3 ml-auto md:ml-0">
-        <input id="table-input" type="text" placeholder="Table / Guest name"
-               class="w-32 sm:w-36 md:w-48 bg-brand-obsidian border border-white/10 rounded-full focus:border-brand-gold text-brand-ice text-xs px-4 py-2 outline-none placeholder:text-brand-muted/60">
+        <button id="btn-orders" class="relative font-mono text-[9px] md:text-[11px] tracking-widest uppercase text-brand-ice border border-white/20 hover:border-brand-gold rounded-full px-3 py-1.5 md:px-4 md:py-2 transition-colors">
+          Orders <span id="orders-badge" class="hidden ml-1 bg-brand-gold text-brand-obsidian rounded-full px-1.5 font-bold">0</span>
+        </button>
         <div class="hidden md:flex items-center gap-2 font-mono text-[11px] text-brand-muted">
           <span id="clock">--:--</span>
         </div>
@@ -185,7 +186,28 @@
           <div class="font-serif text-lg md:text-xl text-brand-ice">Order Ticket</div>
           <div id="ticket-number" class="font-mono text-[10px] md:text-xs text-brand-gold tracking-widest">T-0000</div>
         </div>
-        <div class="font-mono text-[9px] md:text-[10px] tracking-widest text-brand-muted uppercase mb-4">Manila Bay &middot; Yacht Sessions</div>
+        <div class="grid grid-cols-2 gap-2 mb-4">
+          <label class="block">
+            <span class="block font-mono text-[9px] tracking-widest text-brand-muted uppercase mb-1">Table</span>
+            <select id="table-select" class="w-full bg-brand-slate border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm px-3 py-2.5 outline-none">
+              <option value="">Walk-in / Bar</option>
+              <optgroup label="SVIP">
+                <option>SVIP 1</option><option>SVIP 2</option><option>SVIP 3</option><option>SVIP 4</option><option>SVIP 5</option>
+              </optgroup>
+              <optgroup label="VIP">
+                <option>VIP 1</option><option>VIP 2</option><option>VIP 3</option><option>VIP 4</option>
+              </optgroup>
+              <optgroup label="Standing tables">
+                <option>Table 1</option><option>Table 2</option><option>Table 3</option><option>Table 4</option>
+              </optgroup>
+            </select>
+          </label>
+          <label class="block">
+            <span class="block font-mono text-[9px] tracking-widest text-brand-muted uppercase mb-1">Guest name (optional)</span>
+            <input id="table-input" type="text" maxlength="60" placeholder="e.g. Ana" autocomplete="off"
+                   class="w-full bg-brand-slate border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm px-3 py-2.5 outline-none placeholder:text-brand-muted/60">
+          </label>
+        </div>
 
         <div id="cart-empty" class="flex-1 flex items-center justify-center text-center py-6 md:py-10">
           <p class="text-brand-muted text-xs md:text-sm font-light max-w-[220px]">No items yet — tap the menu to start a ticket.</p>
@@ -215,6 +237,19 @@
   </div>
 
   </div><!-- /#app -->
+
+  <!-- ================= RECENT ORDERS ================= -->
+  <div id="orders-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
+    <div class="bg-brand-slate border border-white/10 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full sm:max-w-lg max-h-[85dvh] flex flex-col shadow-2xl">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="font-serif text-2xl text-brand-ice">Recent orders</h3>
+        <button id="orders-close" aria-label="Close" class="text-brand-muted hover:text-brand-ice text-3xl leading-none px-2">&times;</button>
+      </div>
+      <p class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-4">Sent from this device &middot; <span id="orders-updated">not updated yet</span></p>
+      <div id="orders-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+      <button id="orders-refresh" class="mt-4 w-full border border-white/10 text-brand-muted hover:text-brand-ice py-3 rounded-xl font-mono text-[11px] tracking-widest uppercase transition-colors">Refresh</button>
+    </div>
+  </div>
 
   <!-- Toast -->
   <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 translate-y-20 opacity-0 transition-all duration-300 bg-brand-slate border border-brand-gold/40 text-brand-ice text-xs md:text-sm font-mono px-5 py-2.5 md:py-3 rounded-full shadow-2xl z-50 pointer-events-none whitespace-nowrap">
@@ -417,7 +452,7 @@
     function saveTicket() {
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({
-          cart, table: $('table-input').value, notes: $('notes-input').value, gcashOrder: pendingGcashOrder,
+          cart, tableSel: $('table-select').value, table: $('table-input').value, notes: $('notes-input').value, gcashOrder: pendingGcashOrder,
         }));
       } catch (e) {}
     }
@@ -429,6 +464,8 @@
           const m = findMenuItem(l.id);
           return { id: m.id, name: m.name, desc: m.desc || '', price: m.price, qty: Math.max(1, Math.min(50, parseInt(l.qty, 10) || 1)) };
         });
+        $('table-select').value = t.tableSel || '';
+        if ($('table-select').value !== (t.tableSel || '')) $('table-select').value = '';
         $('table-input').value = t.table || '';
         $('notes-input').value = t.notes || '';
         pendingGcashOrder = t.gcashOrder || null;
@@ -582,6 +619,15 @@
 
     $('search-input').addEventListener('input', (e) => { searchTerm = e.target.value; renderCategories(); renderItems(); });
     $('table-input').addEventListener('input', saveTicket);
+    $('table-select').addEventListener('change', saveTicket);
+
+    // What the bar sees: "SVIP 1", "SVIP 1 · Ana", "Ana" (walk-in with a name) or nothing (walk-in).
+    function tableLabel() {
+      const table = $('table-select').value;
+      const name = $('table-input').value.trim();
+      if (!table) return name || null;
+      return name ? table + ' \u00b7 ' + name : table;
+    }
     $('notes-input').addEventListener('input', saveTicket);
 
     $('btn-clear').addEventListener('click', () => {
@@ -596,6 +642,7 @@
       pendingGcashOrder = null;
       $('notes-input').value = '';
       $('table-input').value = '';
+      $('table-select').value = '';
       searchTerm = ''; $('search-input').value = '';
       renderCategories();
       renderCart();
@@ -604,17 +651,19 @@
     // ---- send an order (exactly once per ticket) ----
     let sending = false;
     async function createOrder(payment_method) {
-      return api('/api/orders', {
+      const order = await api('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          table_name: $('table-input').value.trim() || null,
+          table_name: tableLabel(),
           items: cart.map((l) => ({ id: l.id, qty: l.qty })),
           notes: $('notes-input').value.trim() || null,
           status: 'sent',
           payment_method,
         }),
       });
+      rememberOrder(order);
+      return order;
     }
 
     function orderSent(order, how) {
@@ -628,7 +677,7 @@
       if (pendingGcashOrder) { reopenPendingGcash(); return; }
       const total = cartTotal();
       $('cash-total').textContent = peso(total);
-      $('cash-table').textContent = $('table-input').value.trim() || 'Walk-in / Bar';
+      $('cash-table').textContent = tableLabel() || 'Walk-in / Bar';
       $('cash-received').value = '';
       $('cash-error').classList.add('hidden');
       // Quick amounts: exact, then the next round notes above the total.
@@ -804,7 +853,103 @@
       }
     });
 
+    // ---------------- RECENT ORDERS (this device) ----------------
+    // Keeps the last orders sent from this POS and checks the bar for their status.
+    const RECENT_KEY = 'exc_pos_recent_v1';
+    const RECENT_MAX = 15;
+    const RECENT_POLL_MS = 15000;
+    let recent = [];          // newest first: { id, table_name, items, total_amount, payment_method, created_at, status }
+    let recentUpdatedAt = 0;
+    let recentFetching = false;
+
+    try { recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { recent = []; }
+    function saveRecent() { try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch (e) {} }
+
+    function rememberOrder(o) {
+      if (!o || !o.id) return;
+      recent = [{
+        id: o.id, table_name: o.table_name, items: o.items || [], total_amount: o.total_amount,
+        payment_method: o.payment_method, created_at: o.created_at || new Date().toISOString(), status: o.status || 'sent',
+      }].concat(recent.filter((r) => r.id !== o.id)).slice(0, RECENT_MAX);
+      saveRecent();
+      renderRecent();
+    }
+
+    const STATUS_LOOK = {
+      sent:      ['Waiting',   'text-amber-300 border-amber-400/50'],
+      held:      ['Held',      'text-amber-300 border-amber-400/50'],
+      fulfilled: ['Served',    'text-emerald-300 border-emerald-400/50'],
+      cancelled: ['Cancelled', 'text-red-300 border-red-400/50'],
+    };
+    function ago(iso) {
+      const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+      return m < 1 ? 'just now' : m < 60 ? m + 'm ago' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm ago';
+    }
+
+    function renderRecent() {
+      const waiting = recent.filter((r) => r.status === 'sent').length;
+      $('orders-badge').textContent = waiting;
+      $('orders-badge').classList.toggle('hidden', !waiting);
+      $('orders-updated').textContent = recentUpdatedAt
+        ? 'status at ' + new Date(recentUpdatedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+        : 'status not checked yet';
+      if (!recent.length) {
+        $('orders-list').innerHTML = '<div class="text-center text-brand-muted text-sm py-10">No orders sent from this device yet.</div>';
+        return;
+      }
+      $('orders-list').innerHTML = recent.map((r) => {
+        const look = STATUS_LOOK[r.status] || [r.status, 'text-brand-muted border-white/20'];
+        const items = (r.items || []).map((i) => i.qty + '\u00d7 ' + esc(i.name)).join(', ');
+        return `<div class="bg-brand-obsidian/50 border border-white/5 rounded-2xl p-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <span class="font-mono text-brand-gold text-sm font-bold">${shortCode(r.id)}</span>
+              <span class="text-brand-ice text-sm ml-2">${esc(r.table_name || 'Walk-in / Bar')}</span>
+            </div>
+            <span class="font-mono text-[10px] tracking-widest uppercase border rounded-full px-2.5 py-1 shrink-0 ${look[1]}">${look[0]}</span>
+          </div>
+          <div class="text-brand-muted text-xs mt-1 truncate">${items}</div>
+          <div class="flex justify-between font-mono text-[11px] text-brand-muted mt-1">
+            <span>${ago(r.created_at)} &middot; ${esc(r.payment_method || '')}</span><span class="text-brand-gold">${peso(r.total_amount)}</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function refreshRecent(force) {
+      if (recentFetching || !appVisible || !recent.length) return;
+      if (!force && !recent.some((r) => r.status === 'sent')) return;   // nothing to wait for
+      recentFetching = true;
+      try {
+        const all = await api('/api/orders');
+        const byId = {};
+        (Array.isArray(all) ? all : []).forEach((o) => { byId[String(o.id)] = o; });
+        recent.forEach((r) => {
+          const o = byId[String(r.id)];
+          if (!o) return;
+          if (r.status === 'sent' && o.status === 'fulfilled') showToast(shortCode(r.id) + ' served \u00b7 ' + (r.table_name || 'Walk-in / Bar'));
+          if (r.status === 'sent' && o.status === 'cancelled') showToast(shortCode(r.id) + ' was cancelled by the bar', 'error');
+          r.status = o.status;
+          r.payment_method = o.payment_method;
+        });
+        recentUpdatedAt = Date.now();
+        saveRecent();
+      } catch (e) {
+        // Banner already shows connection problems; keep the last known statuses.
+      } finally {
+        recentFetching = false;
+        renderRecent();
+      }
+    }
+
+    $('btn-orders').addEventListener('click', () => { renderRecent(); $('orders-modal').classList.remove('hidden'); refreshRecent(true); });
+    $('orders-close').addEventListener('click', () => $('orders-modal').classList.add('hidden'));
+    $('orders-modal').addEventListener('click', (e) => { if (e.target === $('orders-modal')) $('orders-modal').classList.add('hidden'); });
+    $('orders-refresh').addEventListener('click', () => refreshRecent(true));
+    setInterval(() => { if (document.visibilityState === 'visible') refreshRecent(false); }, RECENT_POLL_MS);
+
     loadTicket();
+    renderRecent();
     renderCategories();
     renderCart();
     if (appVisible && pendingGcashOrder && cart.length) openGcash();
