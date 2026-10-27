@@ -64,6 +64,9 @@
 </head>
 <body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen flex flex-col">
 
+  <!-- Connection status: only shown when orders are not coming through -->
+  <div id="net-banner" class="hidden fixed top-0 inset-x-0 z-[70] text-center font-mono text-xs tracking-wider px-4 py-2" role="status" aria-live="polite"></div>
+
   <!-- ================= LOGIN GATE ================= -->
   <div id="gate" class="min-h-screen flex items-center justify-center px-4 sm:px-6">
     <div class="w-full max-w-md bg-brand-slate border border-white/5 rounded-3xl p-6 sm:p-10 shadow-2xl">
@@ -79,11 +82,12 @@
              class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm sm:text-base px-4 py-3 sm:py-4 outline-none mb-6">
       <button id="login-btn" class="w-full py-3.5 sm:py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-xs sm:text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors shadow-[0_0_15px_rgba(245,197,24,0.3)]">Log in</button>
       <p id="gate-error" class="text-red-400 text-xs sm:text-sm font-mono mt-4 hidden text-center"></p>
+      <p id="gate-info" class="text-amber-300 text-xs sm:text-sm font-mono mt-4 hidden text-center"></p>
     </div>
   </div>
 
   <!-- ================= RECEIPT MODAL ================= -->
-  <div id="receipt-modal" class="fixed inset-0 bg-black/90 hidden z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+  <div id="receipt-modal" class="fixed inset-0 bg-black/90 hidden z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity" onclick="if (event.target === this) this.classList.add('hidden')">
     <div class="relative max-w-2xl w-full flex flex-col items-center">
       <button onclick="document.getElementById('receipt-modal').classList.add('hidden')" class="absolute -top-12 right-0 text-white hover:text-brand-gold text-3xl font-bold">&times;</button>
       <img id="receipt-image" src="" alt="GCash Receipt" class="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-white/10 bg-brand-slate">
@@ -105,9 +109,13 @@
 
         <!-- Clock & Logout (Top Right on Mobile) -->
         <div class="flex items-center gap-2 md:gap-4 order-2 md:order-3 ml-auto md:ml-0">
-          <div class="flex items-center gap-1.5 md:gap-2 font-mono text-[10px] md:text-sm text-brand-gold">
-            <span class="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-brand-gold animate-pulse"></span>
-            <span id="clock">--:--</span>
+          <button id="sound-btn" type="button" class="font-mono text-[9px] md:text-[11px] tracking-widest uppercase border border-white/10 text-brand-muted rounded-full px-3 py-1.5 md:px-4 md:py-2 transition-colors">Sound off</button>
+          <div class="flex flex-col items-end leading-tight">
+            <div class="flex items-center gap-1.5 md:gap-2 font-mono text-[10px] md:text-sm text-brand-gold">
+              <span id="live-dot" class="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-brand-gold animate-pulse"></span>
+              <span id="clock">--:--</span>
+            </div>
+            <span id="last-updated" class="font-mono text-[9px] text-brand-muted">connecting&hellip;</span>
           </div>
           <button id="logout-btn" class="font-mono text-[9px] md:text-[11px] tracking-widest uppercase text-brand-muted hover:text-brand-ice border border-white/10 rounded-full px-3 py-1.5 md:px-4 md:py-2 transition-colors">Log out</button>
         </div>
@@ -216,30 +224,71 @@
   (function () {
     'use strict';
     const $ = (id) => document.getElementById(id);
-    const peso = (n) => '\u20B1' + Number(n || 0).toLocaleString('en-PH');
+    const peso = (n) => '₱' + Number(n || 0).toLocaleString('en-PH');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    // Same short code the POS shows after sending, so staff can match a ticket.
+    const shortCode = (id) => '#' + String(id || '').replace(/-/g, '').slice(-4).toUpperCase();
     const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
     const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+    const POLL_MS = 8000;
+    const REQUEST_TIMEOUT_MS = 30000;
+    const STALE_AFTER_MS = 30000;   // warn if orders haven't refreshed for this long
 
     let activeTab = 'sent';
     let ordersData = [];
     let pollingInterval = null;
+    let fetching = false;
+    let lastOkAt = 0;
+    let lastError = '';
+    let knownSentIds = null;         // ids of "sent" orders already seen (null until first load)
+    const busyIds = new Set();       // orders with an update in flight
+    let appVisible = false;
 
-    // Expose show receipt function to window
-    window.showReceipt = function(url) {
+    // ---------------- RECEIPT VIEWER ----------------
+    function showReceipt(url) {
       $('receipt-image').src = url;
       $('receipt-modal').classList.remove('hidden');
-    };
+    }
+
+    // ---------------- CONNECTION STATUS ----------------
+    function refreshStatus() {
+      const banner = $('net-banner');
+      const stale = lastOkAt && Date.now() - lastOkAt > STALE_AFTER_MS;
+      let msg = '';
+      if (!navigator.onLine) msg = 'Offline — new orders will not appear until the connection is back.';
+      else if (!lastOkAt && lastError) msg = 'Cannot load orders: ' + lastError + ' Retrying…';
+      else if (stale) msg = 'Orders not updating for ' + Math.round((Date.now() - lastOkAt) / 1000) + 's' + (lastError ? ' (' + lastError + ')' : '') + '. Retrying…';
+      banner.classList.toggle('hidden', !msg);
+      if (msg) {
+        banner.className = 'fixed top-0 inset-x-0 z-[70] text-center font-mono text-xs tracking-wider px-4 py-2 bg-red-500 text-white';
+        banner.textContent = msg;
+      }
+      $('live-dot').className = 'w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ' + (msg ? 'bg-red-500' : 'bg-brand-gold animate-pulse');
+      $('last-updated').textContent = lastOkAt
+        ? 'updated ' + new Date(lastOkAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : 'connecting…';
+    }
+    window.addEventListener('online', () => { refreshStatus(); fetchOrders(); });
+    window.addEventListener('offline', refreshStatus);
 
     // ---------------- AUTH ----------------
-    function showApp() { 
-      $('gate').classList.add('hidden'); 
-      $('app').classList.remove('hidden'); 
+    function showApp() {
+      appVisible = true;
+      $('gate').classList.add('hidden');
+      $('app').classList.remove('hidden');
+      $('gate-info').classList.add('hidden');
+      keepScreenOn();
       startPolling();
     }
-    
-    function showGate() { 
-      $('app').classList.add('hidden'); 
-      $('gate').classList.remove('hidden'); 
+
+    function showGate(info) {
+      appVisible = false;
+      $('app').classList.add('hidden');
+      $('gate').classList.remove('hidden');
+      const el = $('gate-info');
+      if (info) { el.textContent = info; el.classList.remove('hidden'); } else { el.classList.add('hidden'); }
+      $('net-banner').classList.add('hidden');
       stopPolling();
     }
 
@@ -249,8 +298,8 @@
       const email = $('email').value.trim();
       const password = $('password').value;
       if (!email || !password) return;
-      $('login-btn').disabled = true; $('login-btn').textContent = 'Logging in\u2026';
-      
+      unlockAudio();
+      $('login-btn').disabled = true; $('login-btn').textContent = 'Logging in…';
       try {
         const res = await sb.auth.signInWithPassword({ email, password });
         if (res.error) throw res.error;
@@ -262,9 +311,10 @@
         $('login-btn').disabled = false; $('login-btn').textContent = 'Log in';
       }
     }
-    
+
     $('login-btn').addEventListener('click', doLogin);
     $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+    $('email').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('password').focus(); });
 
     $('logout-btn').addEventListener('click', async () => {
       await sb.auth.signOut();
@@ -279,81 +329,166 @@
     // ---------------- CLOCK ----------------
     function tickClock() {
       $('clock').textContent = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+      if (appVisible) refreshStatus();
     }
     tickClock();
     setInterval(tickClock, 1000);
 
-    // ---------------- API HELPERS ----------------
+    // ---------------- KEEP SCREEN ON ----------------
+    let wakeLock = null;
+    async function keepScreenOn() {
+      try {
+        if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => { wakeLock = null; });
+        }
+      } catch (e) {}
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && appVisible) { keepScreenOn(); fetchOrders(); }
+    });
+
+    // ---------------- NEW-ORDER SOUND ----------------
+    // Browsers only allow sound after a tap, so the bar taps "Sound off" once to arm it.
+    let audioCtx = null;
+    function unlockAudio() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      } catch (e) {}
+      renderSoundBtn();
+    }
+    function soundOn() { return !!audioCtx && audioCtx.state === 'running'; }
+    function renderSoundBtn() {
+      const on = soundOn();
+      const b = $('sound-btn');
+      b.textContent = on ? 'Sound on' : 'Sound off';
+      b.className = 'font-mono text-[9px] md:text-[11px] tracking-widest uppercase rounded-full px-3 py-1.5 md:px-4 md:py-2 transition-colors border ' +
+        (on ? 'border-green-500/50 text-green-300' : 'border-amber-400/60 text-amber-300 animate-pulse');
+    }
+    $('sound-btn').addEventListener('click', () => { unlockAudio(); setTimeout(() => { renderSoundBtn(); chime(); }, 50); });
+    function chime() {
+      try { if (navigator.vibrate) navigator.vibrate([150, 80, 150]); } catch (e) {}
+      if (!soundOn()) return;
+      try {
+        [0, 0.18].forEach((t, i) => {
+          const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+          o.frequency.value = i ? 1320 : 880;
+          g.gain.setValueAtTime(0.2, audioCtx.currentTime + t);
+          g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + t + 0.3);
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + 0.3);
+        });
+      } catch (e) {}
+    }
+    renderSoundBtn();
+
+    // ---------------- API ----------------
     async function apiFetch(endpoint, method = 'GET', body = null) {
       const s = await sb.auth.getSession();
       const headers = { 'Content-Type': 'application/json' };
-      
-      if (s?.data?.session?.access_token) {
-        headers['Authorization'] = 'Bearer ' + s.data.session.access_token;
-      }
+      if (s?.data?.session?.access_token) headers['Authorization'] = 'Bearer ' + s.data.session.access_token;
 
-      const options = { method, headers };
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+      const options = { method, headers, signal: ctrl.signal };
       if (body) options.body = JSON.stringify(body);
 
-      const res = await fetch(API_BASE + endpoint, options);
+      let res;
+      try {
+        res = await fetch(API_BASE + endpoint, options);
+      } catch (e) {
+        throw new Error(e && e.name === 'AbortError' ? 'Server took too long.' : 'Cannot reach the server.');
+      } finally {
+        clearTimeout(timer);
+      }
       if (res.status === 401) {
-        showGate();
-        throw new Error('Unauthorized');
+        showGate('Your session expired. Log in again to keep receiving orders.');
+        const err = new Error('Session expired.'); err.isAuth = true; throw err;
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'API request failed');
+        throw new Error((typeof err.detail === 'string' && err.detail) || 'Request failed (' + res.status + ').');
       }
       return await res.json();
     }
 
-    // ---------------- CORE LOGIC ----------------
+    // ---------------- ORDERS ----------------
     function startPolling() {
+      stopPolling();
       fetchOrders();
-      pollingInterval = setInterval(fetchOrders, 10000);
+      pollingInterval = setInterval(fetchOrders, POLL_MS);
     }
 
     function stopPolling() {
       if (pollingInterval) clearInterval(pollingInterval);
+      pollingInterval = null;
     }
 
     async function fetchOrders() {
+      if (fetching || !appVisible) return;   // never stack requests on a slow connection
+      fetching = true;
       try {
         const rawOrders = await apiFetch('/api/orders');
-        ordersData = rawOrders || [];
+        ordersData = Array.isArray(rawOrders) ? rawOrders : [];
+        lastOkAt = Date.now(); lastError = '';
+        announceNewOrders();
         updateTabCounts();
         renderView();
       } catch (err) {
-        console.error("Failed to fetch orders:", err);
+        if (!err.isAuth) lastError = err.message;
+      } finally {
+        fetching = false;
+        refreshStatus();
       }
     }
 
-    async function changeOrderStatus(orderId, newStatus, paymentMethod = null) {
+    function announceNewOrders() {
+      const sentIds = ordersData.filter((o) => o.status === 'sent').map((o) => String(o.id));
+      if (knownSentIds) {
+        const fresh = ordersData.filter((o) => o.status === 'sent' && !knownSentIds.has(String(o.id)));
+        if (fresh.length) {
+          chime();
+          showToast(fresh.length === 1
+            ? 'New order ' + shortCode(fresh[0].id) + ' · ' + (fresh[0].table_name || 'Walk-in / Bar')
+            : fresh.length + ' new orders');
+        }
+      }
+      knownSentIds = new Set(sentIds.concat(knownSentIds ? Array.from(knownSentIds) : []));
+    }
+
+    async function changeOrderStatus(order, newStatus, paymentMethod) {
+      const id = String(order.id);
+      if (busyIds.has(id)) return;
+      busyIds.add(id);
+      renderView();
       try {
         const payload = { status: newStatus };
         if (paymentMethod) payload.payment_method = paymentMethod;
-        
-        await apiFetch(`/api/orders/${orderId}/status`, 'PATCH', payload);
-        showToast(`Order updated`);
-        fetchOrders();
+        const updated = await apiFetch('/api/orders/' + encodeURIComponent(id) + '/status', 'PATCH', payload);
+        // Apply right away so the card moves without waiting for the next poll.
+        const i = ordersData.findIndex((o) => String(o.id) === id);
+        if (i !== -1) ordersData[i] = Object.assign({}, ordersData[i], updated || payload);
+        const label = { fulfilled: 'served', cancelled: 'cancelled', sent: 're-opened' }[newStatus] || 'updated';
+        showToast(shortCode(id) + ' ' + label);
       } catch (err) {
-        alert("Could not update order: " + err.message);
+        if (!err.isAuth) showToast('Not saved: ' + err.message, 'error');
+      } finally {
+        busyIds.delete(id);
+        updateTabCounts();
+        renderView();
       }
     }
 
     function updateTabCounts() {
-      const sentCount = ordersData.filter(o => o.status === 'sent').length;
-      $('count-sent').textContent = `(${sentCount})`;
+      $('count-sent').textContent = '(' + ordersData.filter((o) => o.status === 'sent').length + ')';
     }
 
     function timeSince(dateString) {
-      const date = new Date(dateString);
-      const seconds = Math.floor((new Date() - date) / 1000);
-      let interval = seconds / 3600;
-      if (interval > 1) return Math.floor(interval) + "h";
-      interval = seconds / 60;
-      if (interval > 1) return Math.floor(interval) + "m";
-      return "Now";
+      const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+      if (seconds >= 3600) return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+      if (seconds >= 60) return Math.floor(seconds / 60) + 'm';
+      return 'Now';
     }
 
     // ---------------- UI RENDERING ----------------
@@ -373,45 +508,38 @@
     }
 
     function renderDashboard() {
-      const fulfilled = ordersData.filter(o => o.status === 'fulfilled');
-      
-      const totalRevenue = fulfilled.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      const cashRevenue = fulfilled.filter(o => o.payment_method === 'cash').reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      const gcashRevenue = fulfilled.filter(o => o.payment_method === 'gcash').reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      const fulfilled = ordersData.filter((o) => o.status === 'fulfilled');
+      const sum = (list) => list.reduce((s, o) => s + (o.total_amount || 0), 0);
+      const totalRevenue = sum(fulfilled);
       const ordersCount = fulfilled.length;
-      const aov = ordersCount > 0 ? (totalRevenue / ordersCount) : 0;
 
       $('dash-revenue').textContent = peso(totalRevenue);
-      $('dash-cash-revenue').textContent = peso(cashRevenue);
-      $('dash-gcash-revenue').textContent = peso(gcashRevenue);
+      $('dash-cash-revenue').textContent = peso(sum(fulfilled.filter((o) => o.payment_method === 'cash')));
+      $('dash-gcash-revenue').textContent = peso(sum(fulfilled.filter((o) => o.payment_method === 'gcash')));
       $('dash-orders').textContent = ordersCount;
-      $('dash-aov').textContent = peso(aov);
+      $('dash-aov').textContent = peso(ordersCount ? Math.round(totalRevenue / ordersCount) : 0);
 
       const itemStats = {};
-      fulfilled.forEach(order => {
-        (order.items || []).forEach(item => {
-          if (!itemStats[item.name]) {
-            itemStats[item.name] = { qty: 0, revenue: 0 };
-          }
-          itemStats[item.name].qty += item.qty;
-          itemStats[item.name].revenue += (item.qty * (item.price || 0));
+      fulfilled.forEach((order) => {
+        (order.items || []).forEach((item) => {
+          const s = itemStats[item.name] || (itemStats[item.name] = { qty: 0, revenue: 0 });
+          s.qty += item.qty;
+          s.revenue += item.qty * (item.price || 0);
         });
       });
-
       const sortedItems = Object.entries(itemStats)
-        .map(([name, stats]) => ({ name, qty: stats.qty, revenue: stats.revenue }))
+        .map(([name, s]) => ({ name, qty: s.qty, revenue: s.revenue }))
         .sort((a, b) => b.qty - a.qty);
 
-      if (sortedItems.length === 0) {
-        $('dash-top-items').innerHTML = `<div class="text-brand-muted text-xs md:text-sm italic text-center md:text-left">No items fulfilled yet.</div>`;
+      if (!sortedItems.length) {
+        $('dash-top-items').innerHTML = '<div class="text-brand-muted text-xs md:text-sm italic text-center md:text-left">No items fulfilled yet.</div>';
         return;
       }
-
       $('dash-top-items').innerHTML = sortedItems.map((item, index) => `
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-brand-gold/30 transition-colors gap-3 sm:gap-0">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 gap-3 sm:gap-0">
           <div class="flex items-center gap-3 md:gap-4">
             <div class="font-mono text-brand-gold/50 text-xs md:text-sm w-4">${index + 1}.</div>
-            <div class="text-brand-ice text-xs md:text-sm">${item.name}</div>
+            <div class="text-brand-ice text-xs md:text-sm">${esc(item.name)}</div>
           </div>
           <div class="flex items-center gap-4 md:gap-6 sm:justify-end">
             <div class="text-left sm:text-right">
@@ -427,121 +555,143 @@
       `).join('');
     }
 
+    const BTN = 'py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors disabled:opacity-40';
+
     function renderGrid() {
-      const filteredOrders = ordersData.filter(o => o.status === activeTab);
+      // Queue: oldest waiting order first. History tabs: most recent first.
+      const filteredOrders = ordersData
+        .filter((o) => o.status === activeTab)
+        .sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * (activeTab === 'sent' ? 1 : -1));
       const grid = $('orders-grid');
       const empty = $('empty-state');
 
-      if (filteredOrders.length === 0) {
+      if (!filteredOrders.length) {
         grid.innerHTML = '';
         empty.classList.remove('hidden');
         return;
       }
       empty.classList.add('hidden');
 
-      grid.innerHTML = filteredOrders.map(order => {
-        const timeStr = timeSince(order.created_at);
-        const isNew = (new Date() - new Date(order.created_at)) < 60000;
-        const pulseClass = (isNew && activeTab === 'sent') ? 'new-order-pulse' : '';
-        const tableName = order.table_name || 'Walk-in / Bar';
+      grid.innerHTML = filteredOrders.map((order) => {
+        const id = String(order.id);
+        const busy = busyIds.has(id);
+        const ageMs = Date.now() - new Date(order.created_at).getTime();
+        const pulseClass = activeTab === 'sent' && ageMs < 60000 ? 'new-order-pulse' : '';
+        const lateClass = activeTab === 'sent' && ageMs > 10 * 60000 ? 'border-red-500/60' : 'border-white/10';
+        const paid = order.payment_method === 'cash' || order.payment_method === 'gcash';
 
-        const itemsHtml = (order.items || []).map(item => `
+        const itemsHtml = (order.items || []).map((item) => `
           <div class="flex items-start gap-2.5 md:gap-3 py-2 md:py-1.5 border-b border-white/5 last:border-0">
-            <div class="font-mono text-brand-gold font-bold text-xs md:text-sm min-w-[24px] md:min-w-[28px]">${item.qty}x</div>
-            <div class="flex-1">
-              <div class="text-brand-ice text-xs md:text-sm leading-tight">${item.name}</div>
-            </div>
-            <div class="font-mono text-brand-muted text-[11px] md:text-xs">${peso(item.price * item.qty)}</div>
+            <div class="font-mono text-brand-gold font-bold text-base md:text-lg min-w-[32px]">${Number(item.qty) || 0}x</div>
+            <div class="flex-1 text-brand-ice text-sm md:text-base leading-tight">${esc(item.name)}</div>
+            <div class="font-mono text-brand-muted text-[11px] md:text-xs">${peso((item.price || 0) * (item.qty || 0))}</div>
           </div>
         `).join('');
 
         let actionButtons = '';
         if (activeTab === 'sent') {
-          actionButtons = `
-            <div class="grid grid-cols-2 gap-2 w-full mb-1">
-              <button onclick="window.updateOrder('${order.id}', 'fulfilled', 'cash')" class="bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 py-2.5 md:py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Paid Cash</button>
-              <button onclick="window.updateOrder('${order.id}', 'fulfilled', 'gcash')" class="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-500/30 py-2.5 md:py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Paid GCash</button>
-            </div>
-            <button onclick="window.updateOrder('${order.id}', 'cancelled')" class="w-full bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/30 py-2 md:py-2.5 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Cancel Order</button>
-          `;
-        } else if (activeTab === 'fulfilled' || activeTab === 'cancelled') {
-          actionButtons = `
-            <button onclick="window.updateOrder('${order.id}', 'sent')" class="w-full bg-white/5 text-brand-muted hover:bg-white/10 hover:text-brand-ice border border-white/10 py-2.5 md:py-3 rounded-lg md:rounded-xl font-mono text-[10px] md:text-[11px] tracking-widest uppercase transition-colors">Re-open (Sent)</button>
-          `;
+          actionButtons = paid
+            ? `<button data-act="serve" data-id="${esc(id)}" ${busy ? 'disabled' : ''} class="${BTN} w-full bg-brand-gold text-brand-obsidian font-bold hover:bg-brand-ice">Served &check;</button>`
+            : `<div class="grid grid-cols-2 gap-2 w-full">
+                 <button data-act="paid-cash" data-id="${esc(id)}" ${busy ? 'disabled' : ''} class="${BTN} bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30">Paid cash</button>
+                 <button data-act="paid-gcash" data-id="${esc(id)}" ${busy ? 'disabled' : ''} class="${BTN} bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-500/30">Paid GCash</button>
+               </div>`;
+          actionButtons += `<button data-act="cancel" data-id="${esc(id)}" ${busy ? 'disabled' : ''} class="${BTN} w-full bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/30">Cancel order</button>`;
+        } else {
+          actionButtons = `<button data-act="reopen" data-id="${esc(id)}" ${busy ? 'disabled' : ''} class="${BTN} w-full bg-white/5 text-brand-muted hover:bg-white/10 hover:text-brand-ice border border-white/10">Re-open</button>`;
         }
 
         const notesHtml = order.notes ? `
           <div class="mt-3 md:mt-4 p-2.5 md:p-3 bg-red-900/20 border border-red-500/30 rounded-lg md:rounded-xl">
             <div class="font-mono text-[9px] md:text-[10px] tracking-widest text-red-400 uppercase mb-1">Notes</div>
-            <div class="text-xs md:text-sm text-red-100 font-light italic">${order.notes}</div>
-          </div>
-        ` : '';
+            <div class="text-sm text-red-100">${esc(order.notes)}</div>
+          </div>` : '';
 
-        // Add receipt view button if a receipt exists
         const receiptBtn = order.receipt_url ? `
-          <button onclick="window.showReceipt('${order.receipt_url}')" class="mt-3 w-full bg-brand-obsidian border border-brand-gold/30 text-brand-gold hover:bg-brand-goldDim py-2 rounded-lg md:rounded-xl font-mono text-[10px] tracking-widest uppercase transition-colors flex items-center justify-center gap-2">
-            🧾 View GCash Receipt
-          </button>
-        ` : '';
+          <button data-receipt="${esc(order.receipt_url)}" class="mt-3 w-full bg-brand-obsidian border border-brand-gold/30 text-brand-gold hover:bg-brand-goldDim py-2 rounded-lg md:rounded-xl font-mono text-[10px] tracking-widest uppercase transition-colors">
+            &#129534; View GCash receipt
+          </button>` : (order.payment_method === 'gcash' ? `
+          <div class="mt-3 font-mono text-[10px] tracking-widest uppercase text-amber-300 text-center">GCash &middot; no receipt photo</div>` : '');
 
-        const paymentBadge = order.payment_method && order.payment_method !== 'unpaid' ? 
-          `<span class="ml-2 font-mono text-[9px] uppercase px-1.5 py-0.5 rounded border ${order.payment_method === 'cash' ? 'border-green-500/50 text-green-400 bg-green-500/10' : 'border-blue-500/50 text-blue-400 bg-blue-500/10'}">${order.payment_method}</span>` : '';
+        const paymentBadge = paid
+          ? `<span class="font-mono text-[9px] uppercase px-1.5 py-0.5 rounded border ${order.payment_method === 'cash' ? 'border-green-500/50 text-green-400 bg-green-500/10' : 'border-blue-500/50 text-blue-400 bg-blue-500/10'}">Paid ${esc(order.payment_method)}</span>`
+          : '<span class="font-mono text-[9px] uppercase px-1.5 py-0.5 rounded border border-amber-400/50 text-amber-300">Unpaid</span>';
 
         return `
-          <div class="bg-brand-slate border border-white/10 rounded-xl md:rounded-2xl p-4 md:p-5 flex flex-col h-full shadow-lg ${pulseClass}">
-            <div class="flex items-center justify-between mb-3 md:mb-4 pb-3 md:pb-4 border-b border-white/5">
-              <div class="font-serif text-lg md:text-xl text-brand-ice truncate pr-2 flex items-center">${tableName} ${paymentBadge}</div>
-              <div class="font-mono text-[10px] md:text-xs text-brand-muted whitespace-nowrap bg-brand-obsidian px-2 py-1 md:px-2.5 md:py-1 rounded-md">${timeStr}</div>
+          <div class="bg-brand-slate border ${lateClass} rounded-xl md:rounded-2xl p-4 md:p-5 flex flex-col h-full shadow-lg ${pulseClass} ${busy ? 'opacity-60' : ''}">
+            <div class="flex items-start justify-between gap-2 mb-3 md:mb-4 pb-3 md:pb-4 border-b border-white/5">
+              <div class="min-w-0">
+                <div class="font-serif text-lg md:text-xl text-brand-ice truncate">${esc(order.table_name || 'Walk-in / Bar')}</div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="font-mono text-[11px] text-brand-gold">${shortCode(id)}</span>
+                  ${paymentBadge}
+                </div>
+              </div>
+              <div class="font-mono text-[10px] md:text-xs ${lateClass === 'border-red-500/60' ? 'text-red-300' : 'text-brand-muted'} whitespace-nowrap bg-brand-obsidian px-2 py-1 md:px-2.5 rounded-md">${timeSince(order.created_at)}</div>
             </div>
-            
             <div class="flex-1 overflow-y-auto pr-1 mb-3 md:mb-4">
               ${itemsHtml}
               ${notesHtml}
               ${receiptBtn}
             </div>
-            
             <div class="ticket-tear pt-4 md:pt-5 mt-auto flex flex-col gap-2.5 md:gap-3">
               <div class="flex justify-between items-center text-xs md:text-sm mb-1">
                 <span class="font-serif text-brand-muted">Total</span>
                 <span class="font-mono text-brand-gold">${peso(order.total_amount)}</span>
               </div>
-              <div class="flex flex-col gap-2 w-full">
-                ${actionButtons}
-              </div>
+              <div class="flex flex-col gap-2 w-full">${actionButtons}</div>
             </div>
-          </div>
-        `;
+          </div>`;
       }).join('');
     }
 
-    window.updateOrder = function(id, status, paymentMethod = null) {
-      changeOrderStatus(id, status, paymentMethod);
-    };
+    // One listener for every card button (cards are re-rendered on each poll).
+    $('orders-grid').addEventListener('click', (e) => {
+      const r = e.target.closest('[data-receipt]');
+      if (r) { showReceipt(r.getAttribute('data-receipt')); return; }
+      const b = e.target.closest('[data-act]');
+      if (!b || b.disabled) return;
+      unlockAudio();
+      const order = ordersData.find((o) => String(o.id) === b.getAttribute('data-id'));
+      if (!order) return;
+      const who = shortCode(order.id) + ' · ' + (order.table_name || 'Walk-in / Bar') + ' · ' + peso(order.total_amount);
+      switch (b.getAttribute('data-act')) {
+        case 'serve':      changeOrderStatus(order, 'fulfilled'); break;
+        case 'paid-cash':  changeOrderStatus(order, 'fulfilled', 'cash'); break;
+        case 'paid-gcash': changeOrderStatus(order, 'fulfilled', 'gcash'); break;
+        case 'reopen':     changeOrderStatus(order, 'sent'); break;
+        case 'cancel':
+          if (confirm('Cancel order ' + who + '?\n\nOnly cancel if it will not be served' + (order.payment_method === 'cash' || order.payment_method === 'gcash' ? ' — it is already PAID, so refund the guest.' : '.'))) {
+            changeOrderStatus(order, 'cancelled');
+          }
+          break;
+      }
+    });
 
     // ---------------- TAB NAVIGATION ----------------
-    document.querySelectorAll('.status-tab').forEach(btn => {
+    document.querySelectorAll('.status-tab').forEach((btn) => {
       btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.status-tab').forEach(b => {
+        document.querySelectorAll('.status-tab').forEach((b) => {
           b.classList.remove('active', 'border-brand-gold', 'bg-brand-goldDim/20', 'text-brand-gold');
           b.classList.add('border-white/10', 'text-brand-muted');
         });
-        
         const target = e.currentTarget;
         target.classList.remove('border-white/10', 'text-brand-muted');
         target.classList.add('active', 'border-brand-gold', 'bg-brand-goldDim/20', 'text-brand-gold');
-        
         activeTab = target.getAttribute('data-tab');
-        renderView(); 
+        renderView();
       });
     });
 
     // ---------------- TOAST ----------------
-    function showToast(msg) {
+    function showToast(msg, tone) {
       const t = $('toast');
       $('toast-msg').textContent = msg;
+      t.classList.toggle('border-red-400/60', tone === 'error');
+      t.classList.toggle('border-brand-gold/40', tone !== 'error');
       t.classList.remove('translate-y-24', 'opacity-0');
       clearTimeout(showToast._t);
-      showToast._t = setTimeout(() => t.classList.add('translate-y-24', 'opacity-0'), 3000);
+      showToast._t = setTimeout(() => t.classList.add('translate-y-24', 'opacity-0'), tone === 'error' ? 5000 : 3000);
     }
 
   })();

@@ -56,6 +56,9 @@
 </head>
 <body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen">
 
+  <!-- Connection status: only shown when the server is slow/unreachable or the device is offline -->
+  <div id="net-banner" class="hidden fixed top-0 inset-x-0 z-[70] text-center font-mono text-xs tracking-wider px-4 py-2" role="status" aria-live="polite"></div>
+
   <!-- ================= LOGIN GATE ================= -->
   <div id="gate" class="min-h-screen flex items-center justify-center px-4 sm:px-6">
     <div class="w-full max-w-md bg-brand-slate border border-white/5 rounded-3xl p-6 sm:p-10 shadow-2xl">
@@ -71,6 +74,30 @@
              class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm sm:text-base px-4 py-3 sm:py-4 outline-none mb-6">
       <button id="login-btn" class="w-full py-3.5 sm:py-4 rounded-full bg-brand-gold text-brand-obsidian font-mono text-xs sm:text-sm font-bold tracking-widest uppercase hover:bg-brand-ice transition-colors shadow-[0_0_15px_rgba(245,197,24,0.3)]">Log in</button>
       <p id="gate-error" class="text-red-400 text-xs sm:text-sm font-mono mt-4 hidden text-center"></p>
+      <p id="gate-info" class="text-amber-300 text-xs sm:text-sm font-mono mt-4 hidden text-center"></p>
+    </div>
+  </div>
+
+  <!-- ================= CASH MODAL ================= -->
+  <div id="cash-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-brand-slate border border-green-500/30 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl">
+      <h3 class="font-serif text-2xl text-brand-ice mb-1 text-center">Cash payment</h3>
+      <p class="font-mono text-[10px] sm:text-xs text-brand-muted mb-5 uppercase tracking-widest text-center"><span id="cash-table"></span></p>
+      <div class="flex items-center justify-between mb-4">
+        <span class="font-mono text-xs tracking-widest uppercase text-brand-muted">Total</span>
+        <span id="cash-total" class="font-mono text-2xl text-brand-gold font-bold">₱0</span>
+      </div>
+      <label for="cash-received" class="block font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-2">Cash received (optional)</label>
+      <input id="cash-received" type="number" inputmode="numeric" min="0" placeholder="e.g. 5000"
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-green-400 text-brand-ice text-lg font-mono px-4 py-3 outline-none mb-3">
+      <div id="cash-quick" class="grid grid-cols-4 gap-2 mb-4"></div>
+      <div class="flex items-center justify-between bg-brand-obsidian/60 border border-white/5 rounded-xl px-4 py-3 mb-5">
+        <span class="font-mono text-xs tracking-widest uppercase text-brand-muted">Change</span>
+        <span id="cash-change" class="font-mono text-xl text-green-300 font-bold">&mdash;</span>
+      </div>
+      <p id="cash-error" class="hidden text-red-300 font-mono text-xs mb-3 text-center"></p>
+      <button id="cash-confirm" class="w-full bg-green-500 text-brand-obsidian py-4 rounded-xl font-mono text-xs tracking-widest uppercase font-bold hover:bg-green-400 transition-colors disabled:opacity-40">Confirm &amp; send to bar</button>
+      <button id="cash-cancel" class="w-full mt-2 border border-white/10 text-brand-muted hover:text-brand-ice py-3 rounded-xl font-mono text-[11px] tracking-widest uppercase transition-colors">Back</button>
     </div>
   </div>
 
@@ -86,7 +113,8 @@
   <div id="gcash-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center p-4 backdrop-blur-sm">
     <div class="bg-brand-slate border border-brand-gold/30 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl">
         <h3 class="font-serif text-2xl text-brand-ice mb-1">Pay via GCash</h3>
-        <p class="font-mono text-[10px] sm:text-xs text-brand-muted mb-6 uppercase tracking-widest">Guest scans this QR</p>
+        <p class="font-mono text-[10px] sm:text-xs text-brand-muted mb-2 uppercase tracking-widest">Guest scans this QR</p>
+        <div id="gcash-total" class="font-mono text-2xl text-brand-gold font-bold mb-4">₱0</div>
         
         <div class="bg-white p-3 rounded-2xl inline-block mb-6 shadow-lg">
             <img src="images/gcash.png" alt="GCash QR" class="w-40 h-40 sm:w-48 sm:h-48 object-contain">
@@ -99,6 +127,8 @@
                 📸 Open Camera for Receipt
             </button>
             <div id="upload-status" class="font-mono text-[10px] tracking-widest uppercase text-brand-gold hidden py-3 animate-pulse">Uploading Order & Receipt...</div>
+            <p id="gcash-error" class="hidden text-red-300 font-mono text-xs"></p>
+            <button id="btn-gcash-nophoto" class="w-full border border-blue-400/30 text-blue-300 hover:bg-blue-500/10 py-3 rounded-xl font-mono text-[10px] sm:text-[11px] tracking-widest uppercase transition-colors">Send without photo</button>
             
             <button id="btn-close-modal" class="w-full border border-white/10 text-brand-muted hover:text-brand-ice hover:bg-white/5 py-3.5 sm:py-4 rounded-xl font-mono text-[11px] sm:text-xs tracking-widest uppercase transition-colors">Cancel</button>
         </div>
@@ -138,7 +168,7 @@
     <!-- Item grid -->
     <main class="order-2 flex-1 min-w-0 px-3 sm:px-4 md:px-6 py-4 overflow-y-auto h-full">
       <div class="mb-4">
-        <input id="search-input" type="text" placeholder="Search this category…"
+        <input id="search-input" type="search" placeholder="Search all items…" autocomplete="off"
                class="w-full bg-brand-slate border border-white/10 rounded-2xl focus:border-brand-gold text-brand-ice text-sm px-5 py-3 outline-none placeholder:text-brand-muted/60 shadow-inner">
       </div>
       <div id="item-grid" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3"></div>
@@ -196,19 +226,90 @@
   (function () {
     'use strict';
     const $ = (id) => document.getElementById(id);
-    const peso = (n) => '\u20B1' + Number(n || 0).toLocaleString('en-PH');
+    const peso = (n) => '₱' + Number(n || 0).toLocaleString('en-PH');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    // Short order code shown here and on the bar display, so staff can match a ticket.
+    const shortCode = (id) => '#' + String(id || '').replace(/-/g, '').slice(-4).toUpperCase();
     const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
     const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-    // ---------------- AUTH ----------------
+    // ---------------- NETWORK ----------------
+    // The backend sleeps when idle and can take up to a minute to wake, so requests get a
+    // generous timeout and a visible banner instead of silently hanging.
+    const REQUEST_TIMEOUT_MS = 60000;
+    const SLOW_AFTER_MS = 5000;
+    let slowRequests = 0, lastNetError = false, appVisible = false;
+
+    function setBanner(kind, text) {
+      const el = $('net-banner');
+      if (!kind) { el.classList.add('hidden'); return; }
+      el.className = 'fixed top-0 inset-x-0 z-[70] text-center font-mono text-xs tracking-wider px-4 py-2 ' +
+        (kind === 'slow' ? 'bg-amber-400 text-brand-obsidian' : 'bg-red-500 text-white');
+      el.textContent = text;
+    }
+    function refreshBanner() {
+      if (!navigator.onLine) return setBanner('down', 'You are offline — orders cannot be sent until the connection is back.');
+      if (slowRequests > 0) return setBanner('slow', 'Server is waking up — this can take up to a minute…');
+      if (lastNetError) return setBanner('down', 'Connection problem — the last order may not have been sent.');
+      setBanner(null);
+    }
+    window.addEventListener('online', refreshBanner);
+    window.addEventListener('offline', refreshBanner);
+
     async function authHeader() {
       const s = await sb.auth.getSession();
       const token = s && s.data && s.data.session ? s.data.session.access_token : null;
       return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
 
-    function showApp() { $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); }
-    function showGate() { $('app').classList.add('hidden'); $('gate').classList.remove('hidden'); }
+    class AuthError extends Error { constructor() { super('Session expired.'); this.isAuth = true; } }
+
+    // Returns parsed JSON. Throws Error with a staff-readable message (AuthError on 401).
+    async function api(path, opts = {}) {
+      const headers = Object.assign({}, await authHeader(), opts.headers || {});
+      const ctrl = new AbortController();
+      let isSlow = false;
+      const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+      const slowTimer = setTimeout(() => { isSlow = true; slowRequests++; refreshBanner(); }, SLOW_AFTER_MS);
+      let res;
+      try {
+        res = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: ctrl.signal }));
+        lastNetError = false;
+      } catch (e) {
+        lastNetError = true;
+        throw new Error(e && e.name === 'AbortError'
+          ? 'The server took too long to respond.'
+          : 'Could not reach the server. Check the connection.');
+      } finally {
+        clearTimeout(timer); clearTimeout(slowTimer);
+        if (isSlow) slowRequests--;
+        refreshBanner();
+      }
+      if (res.status === 401) { sessionExpired(); throw new AuthError(); }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && typeof data.detail === 'string' && data.detail) || 'Request failed (' + res.status + ').');
+      return data;
+    }
+
+    // ---------------- AUTH ----------------
+    function showApp() {
+      appVisible = true;
+      $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
+      $('gate-info').classList.add('hidden');
+      keepScreenOn();
+      // A GCash order that reached the bar but is still missing its receipt photo.
+      if (pendingGcashOrder && cart.length) openGcash();
+    }
+    function showGate(info) {
+      appVisible = false;
+      $('app').classList.add('hidden'); $('gate').classList.remove('hidden');
+      const el = $('gate-info');
+      if (info) { el.textContent = info; el.classList.remove('hidden'); } else { el.classList.add('hidden'); }
+    }
+    function sessionExpired() {
+      if (!appVisible) return;
+      showGate('Your session expired. Log in again — the current ticket is kept.');
+    }
 
     async function doLogin() {
       const err = $('gate-error');
@@ -216,7 +317,7 @@
       const email = $('email').value.trim();
       const password = $('password').value;
       if (!email || !password) return;
-      $('login-btn').disabled = true; $('login-btn').textContent = 'Logging in\u2026';
+      $('login-btn').disabled = true; $('login-btn').textContent = 'Logging in…';
       try {
         const res = await sb.auth.signInWithPassword({ email, password });
         if (res.error) {
@@ -226,7 +327,7 @@
           showApp();
         }
       } catch (e) {
-        err.textContent = 'Could not reach the auth server.';
+        err.textContent = 'Could not reach the login server.';
         err.classList.remove('hidden');
       } finally {
         $('login-btn').disabled = false; $('login-btn').textContent = 'Log in';
@@ -234,8 +335,10 @@
     }
     $('login-btn').addEventListener('click', doLogin);
     $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+    $('email').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('password').focus(); });
 
     $('logout-btn').addEventListener('click', async () => {
+      if (cart.length && !confirm('Log out? The current ticket stays saved on this device.')) return;
       await sb.auth.signOut();
       showGate();
     });
@@ -249,21 +352,37 @@
       else showGate();
     });
 
+    // Wake the backend early so the first order isn't slow.
+    if (API_BASE) fetch(API_BASE + '/api/availability').catch(() => {});
+
+    // ---------------- KEEP SCREEN ON ----------------
+    let wakeLock = null;
+    async function keepScreenOn() {
+      try {
+        if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => { wakeLock = null; });
+        }
+      } catch (e) {}
+    }
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && appVisible) keepScreenOn(); });
+
     // ---------------- MENU ----------------
+    // Item ids must match POS_MENU_PRICES in the backend; the backend sets the real prices.
     const MENU = [
       {
         id: 'packages', label: 'Packages',
         items: [
-          { id: 'pkg-breeze',      name: 'Breeze',    desc: '6 Sprite + 1 Absolut Vodka',        price: 3550 },
-          { id: 'pkg-ignition-ab', name: 'Ignition',  desc: '6 Red Bull + 1 Absolut Vodka',      price: 3850 },
-          { id: 'pkg-ignition-jg', name: 'Ignition',  desc: '6 Red Bull + 1 Jägermeister',       price: 4000 },
+          { id: 'pkg-breeze',      name: 'Breeze',                   desc: '6 Sprite + 1 Absolut Vodka',   price: 3550 },
+          { id: 'pkg-ignition-ab', name: 'Ignition (Absolut)',       desc: '6 Red Bull + 1 Absolut Vodka', price: 3850 },
+          { id: 'pkg-ignition-jg', name: 'Ignition (Jägermeister)', desc: '6 Red Bull + 1 Jägermeister',  price: 4000 },
         ],
       },
       {
         id: 'bottles', label: 'Bottles',
         items: [
           { id: 'btl-absolut', name: 'Absolut Vodka',              price: 2850 },
-          { id: 'btl-jager',   name: 'Jägermeister',                price: 3000 },
+          { id: 'btl-jager',   name: 'Jägermeister',          price: 3000 },
           { id: 'btl-jwblack', name: 'Johnnie Walker Black Label', price: 3195 },
         ],
       },
@@ -282,7 +401,7 @@
         id: 'foods', label: 'Foods',
         items: [
           { id: 'food-tacos',   name: 'Tacos',             price: 500 },
-          { id: 'food-nachos',  name: 'Nachos',             price: 550 },
+          { id: 'food-nachos',  name: 'Nachos',            price: 550 },
           { id: 'food-board',   name: 'Charcuterie Board', price: 750 },
         ],
       },
@@ -290,7 +409,31 @@
 
     let activeCategory = MENU[0].id;
     let searchTerm = '';
-    let cart = []; 
+    let cart = [];
+
+    // ---------------- SAVED TICKET ----------------
+    // The ticket survives a refresh, a locked phone or a re-login.
+    const STORE_KEY = 'exc_pos_ticket_v1';
+    function saveTicket() {
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify({
+          cart, table: $('table-input').value, notes: $('notes-input').value, gcashOrder: pendingGcashOrder,
+        }));
+      } catch (e) {}
+    }
+    function loadTicket() {
+      try {
+        const t = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+        if (!t) return;
+        cart = (t.cart || []).filter((l) => findMenuItem(l.id)).map((l) => {
+          const m = findMenuItem(l.id);
+          return { id: m.id, name: m.name, desc: m.desc || '', price: m.price, qty: Math.max(1, Math.min(50, parseInt(l.qty, 10) || 1)) };
+        });
+        $('table-input').value = t.table || '';
+        $('notes-input').value = t.notes || '';
+        pendingGcashOrder = t.gcashOrder || null;
+      } catch (e) {}
+    }
 
     // ---- clock ----
     function tickClock() {
@@ -299,14 +442,14 @@
     tickClock();
     setInterval(tickClock, 15000);
 
-    // ---- ticket number ----
-    $('ticket-number').textContent = 'T-' + String(Math.floor(1000 + Math.random() * 9000));
+    // ---- ticket number (local reference until the order gets its real code) ----
+    $('ticket-number').textContent = 'New ticket';
 
     // ---- category rail ----
     function renderCategories() {
       const el = $('category-list');
       el.innerHTML = MENU.map((cat) => {
-        const active = cat.id === activeCategory;
+        const active = !searchTerm.trim() && cat.id === activeCategory;
         return `<button data-cat="${cat.id}"
           class="tap-target text-left font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full lg:rounded-xl px-4 py-2.5 md:py-3 border transition-colors whitespace-nowrap
           ${active
@@ -319,6 +462,7 @@
       el.querySelectorAll('[data-cat]').forEach((btn) => {
         btn.addEventListener('click', () => {
           activeCategory = btn.getAttribute('data-cat');
+          searchTerm = ''; $('search-input').value = '';
           renderCategories();
           renderItems();
         });
@@ -327,26 +471,30 @@
 
     // ---- item grid ----
     function renderItems() {
-      const cat = MENU.find((c) => c.id === activeCategory);
       const term = searchTerm.trim().toLowerCase();
-      const items = cat.items.filter((it) => it.name.toLowerCase().includes(term) || (it.desc || '').toLowerCase().includes(term));
+      // With a search term, look through every category, not just the open one.
+      const pool = term ? MENU.flatMap((c) => c.items) : MENU.find((c) => c.id === activeCategory).items;
+      const items = pool.filter((it) => !term || it.name.toLowerCase().includes(term) || (it.desc || '').toLowerCase().includes(term));
 
       $('item-grid').classList.toggle('hidden', items.length === 0);
       $('item-empty').classList.toggle('hidden', items.length !== 0);
 
-      $('item-grid').innerHTML = items.map((it) => `
+      $('item-grid').innerHTML = items.map((it) => {
+        const inCart = cart.find((l) => l.id === it.id);
+        return `
         <button data-add="${it.id}"
-          class="tap-target group text-left bg-brand-slate border border-white/5 hover:border-brand-gold/50 rounded-xl md:rounded-2xl p-3 md:p-4 transition-colors flex flex-col justify-between min-h-[90px] md:min-h-[112px] shadow-sm">
+          class="tap-target group relative text-left bg-brand-slate border ${inCart ? 'border-brand-gold/60' : 'border-white/5'} hover:border-brand-gold/50 active:scale-[0.98] rounded-xl md:rounded-2xl p-3 md:p-4 transition flex flex-col justify-between min-h-[90px] md:min-h-[112px] shadow-sm">
+          ${inCart ? `<span class="absolute top-2 right-2 font-mono text-[10px] bg-brand-gold text-brand-obsidian rounded-full px-2 py-0.5 font-bold">${inCart.qty}</span>` : ''}
           <div>
-            <div class="text-xs md:text-sm text-brand-ice leading-tight">${it.name}</div>
-            ${it.desc ? `<div class="text-brand-muted text-[9px] md:text-[10px] leading-tight mt-1">${it.desc}</div>` : ''}
+            <div class="text-xs md:text-sm text-brand-ice leading-tight pr-6">${esc(it.name)}</div>
+            ${it.desc ? `<div class="text-brand-muted text-[9px] md:text-[10px] leading-tight mt-1">${esc(it.desc)}</div>` : ''}
           </div>
           <div class="flex items-center justify-between mt-2 md:mt-3">
             <span class="font-mono text-brand-gold text-xs md:text-sm">${peso(it.price)}</span>
             <span class="font-mono text-[9px] md:text-[10px] tracking-widest uppercase text-brand-muted group-hover:text-brand-gold transition-colors">+ Add</span>
           </div>
-        </button>
-      `).join('');
+        </button>`;
+      }).join('');
 
       $('item-grid').querySelectorAll('[data-add]').forEach((btn) => {
         btn.addEventListener('click', () => addToCart(btn.getAttribute('data-add')));
@@ -363,26 +511,32 @@
 
     // ---- cart ----
     function addToCart(id) {
+      if (pendingGcashOrder) { reopenPendingGcash(); return; }
       const menuItem = findMenuItem(id);
       if (!menuItem) return;
       const line = cart.find((l) => l.id === id);
-      if (line) line.qty += 1;
+      if (line) line.qty = Math.min(50, line.qty + 1);
       else cart.push({ id: menuItem.id, name: menuItem.name, desc: menuItem.desc || '', price: menuItem.price, qty: 1 });
       renderCart();
+      showToast('+1 ' + menuItem.name);
     }
 
     function changeQty(id, delta) {
+      if (pendingGcashOrder) { reopenPendingGcash(); return; }
       const line = cart.find((l) => l.id === id);
       if (!line) return;
-      line.qty += delta;
+      line.qty = Math.min(50, line.qty + delta);
       if (line.qty <= 0) cart = cart.filter((l) => l.id !== id);
       renderCart();
     }
 
     function removeLine(id) {
+      if (pendingGcashOrder) { reopenPendingGcash(); return; }
       cart = cart.filter((l) => l.id !== id);
       renderCart();
     }
+
+    function cartTotal() { return cart.reduce((s, l) => s + l.price * l.qty, 0); }
 
     function renderCart() {
       const hasItems = cart.length > 0;
@@ -393,16 +547,16 @@
       $('cart-lines').innerHTML = cart.map((l) => `
         <div class="flex items-center gap-2 md:gap-3">
           <div class="flex-1 min-w-0">
-            <div class="text-xs md:text-sm text-brand-ice truncate leading-tight">${l.name}</div>
-            <div class="font-mono text-[10px] md:text-xs text-brand-muted">${peso(l.price)} each</div>
+            <div class="text-xs md:text-sm text-brand-ice truncate leading-tight">${esc(l.name)}</div>
+            <div class="font-mono text-[10px] md:text-xs text-brand-muted truncate">${l.desc ? esc(l.desc) + ' &middot; ' : ''}${peso(l.price)} each</div>
           </div>
           <div class="flex items-center gap-1.5 md:gap-2">
-            <button data-dec="${l.id}" class="tap-target w-6 h-6 md:w-7 md:h-7 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-xs md:text-sm leading-none">–</button>
-            <span class="font-mono text-xs md:text-sm w-4 md:w-5 text-center">${l.qty}</span>
-            <button data-inc="${l.id}" class="tap-target w-6 h-6 md:w-7 md:h-7 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-xs md:text-sm leading-none">+</button>
+            <button data-dec="${l.id}" aria-label="One fewer" class="tap-target w-8 h-8 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-sm leading-none">&minus;</button>
+            <span class="font-mono text-xs md:text-sm w-5 text-center">${l.qty}</span>
+            <button data-inc="${l.id}" aria-label="One more" class="tap-target w-8 h-8 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-sm leading-none">+</button>
           </div>
-          <div class="font-mono text-xs md:text-sm text-brand-gold w-14 md:w-16 text-right">${peso(l.price * l.qty)}</div>
-          <button data-remove="${l.id}" class="tap-target text-brand-muted hover:text-red-300 text-sm leading-none px-1">&times;</button>
+          <div class="font-mono text-xs md:text-sm text-brand-gold w-16 text-right">${peso(l.price * l.qty)}</div>
+          <button data-remove="${l.id}" aria-label="Remove" class="tap-target text-brand-muted hover:text-red-300 text-lg leading-none px-1">&times;</button>
         </div>
       `).join('');
 
@@ -410,94 +564,176 @@
       $('cart-lines').querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => changeQty(b.getAttribute('data-dec'), -1)));
       $('cart-lines').querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => removeLine(b.getAttribute('data-remove'))));
 
-      const total = cart.reduce((s, l) => s + l.price * l.qty, 0);
-      $('total').textContent = peso(total);
+      $('total').textContent = peso(cartTotal());
+      $('ticket-number').textContent = hasItems ? cart.reduce((n, l) => n + l.qty, 0) + ' item' + (cart.reduce((n, l) => n + l.qty, 0) === 1 ? '' : 's') : 'New ticket';
+      renderItems();
+      saveTicket();
     }
 
-    function showToast(msg) {
+    function showToast(msg, tone) {
       const t = $('toast');
       t.textContent = msg;
+      t.classList.toggle('border-red-400/60', tone === 'error');
+      t.classList.toggle('border-brand-gold/40', tone !== 'error');
       t.classList.remove('translate-y-20', 'opacity-0');
       clearTimeout(showToast._t);
-      showToast._t = setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 2500);
+      showToast._t = setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), tone === 'error' ? 4000 : 2500);
     }
 
-    $('search-input').addEventListener('input', (e) => { searchTerm = e.target.value; renderItems(); });
+    $('search-input').addEventListener('input', (e) => { searchTerm = e.target.value; renderCategories(); renderItems(); });
+    $('table-input').addEventListener('input', saveTicket);
+    $('notes-input').addEventListener('input', saveTicket);
 
     $('btn-clear').addEventListener('click', () => {
       if (!cart.length) return;
+      if (pendingGcashOrder) { reopenPendingGcash(); return; }
       if (!confirm('Clear this ticket?')) return;
       newTicket();
     });
 
     function newTicket() {
       cart = [];
+      pendingGcashOrder = null;
       $('notes-input').value = '';
-      $('ticket-number').textContent = 'T-' + String(Math.floor(1000 + Math.random() * 9000));
+      $('table-input').value = '';
+      searchTerm = ''; $('search-input').value = '';
+      renderCategories();
       renderCart();
     }
 
-    // ---- Standard Order Creation ----
-    async function submitOrder(status, payment_method, btn) {
-      if (!cart.length) return null;
-      let original = "";
-      if (btn) {
-        original = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Sending\u2026';
-      }
-      
-      try {
-        const headers = await authHeader();
-        headers['Content-Type'] = 'application/json';
-        const res = await fetch(API_BASE + '/api/orders', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            table_name: $('table-input').value.trim() || null,
-            items: cart.map((l) => ({ id: l.id, qty: l.qty })),
-            notes: $('notes-input').value.trim() || null,
-            status,
-            payment_method
-          }),
-        });
-        if (res.status === 401) { showGate(); return null; }
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          alert((data && data.detail) || 'Could not save the order.');
-          return null;
-        }
-        return data;
-      } catch (e) {
-        alert('Could not reach the server. Check your connection.');
-        return null;
-      } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = original;
-        }
-      }
+    // ---- send an order (exactly once per ticket) ----
+    let sending = false;
+    async function createOrder(payment_method) {
+      return api('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: $('table-input').value.trim() || null,
+          items: cart.map((l) => ({ id: l.id, qty: l.qty })),
+          notes: $('notes-input').value.trim() || null,
+          status: 'sent',
+          payment_method,
+        }),
+      });
     }
-    
-    // ---- Event Listener for Cash ----
-    $('btn-pay-cash').addEventListener('click', async () => {
-      const res = await submitOrder('sent', 'cash', $('btn-pay-cash'));
-      if (res) { showToast('Sent to bar (Cash Paid)'); newTicket(); }
+
+    function orderSent(order, how) {
+      showToast('Sent to bar ' + shortCode(order.id) + ' · ' + how + ' · ' + peso(order.total_amount));
+      newTicket();
+    }
+
+    // ---- CASH ----
+    function openCash() {
+      if (!cart.length) return;
+      if (pendingGcashOrder) { reopenPendingGcash(); return; }
+      const total = cartTotal();
+      $('cash-total').textContent = peso(total);
+      $('cash-table').textContent = $('table-input').value.trim() || 'Walk-in / Bar';
+      $('cash-received').value = '';
+      $('cash-error').classList.add('hidden');
+      // Quick amounts: exact, then the next round notes above the total.
+      const quick = [total];
+      [500, 1000, 5000].forEach((step) => { const v = Math.ceil((total + 1) / step) * step; if (quick.indexOf(v) === -1 && quick.length < 4) quick.push(v); });
+      $('cash-quick').innerHTML = quick.map((v, i) => `<button type="button" data-amt="${v}" class="font-mono text-[11px] rounded-lg border border-white/10 py-2 hover:border-green-400 hover:text-green-300">${i === 0 ? 'Exact' : peso(v)}</button>`).join('');
+      $('cash-quick').querySelectorAll('[data-amt]').forEach((b) => b.addEventListener('click', () => { $('cash-received').value = b.getAttribute('data-amt'); updateChange(); }));
+      updateChange();
+      $('cash-modal').classList.remove('hidden');
+      $('cash-received').focus();
+    }
+    function updateChange() {
+      const total = cartTotal();
+      const raw = $('cash-received').value.trim();
+      const got = parseInt(raw, 10);
+      const short = raw !== '' && (isNaN(got) || got < total);
+      $('cash-change').textContent = raw === '' || isNaN(got) ? '—' : (short ? 'Short ' + peso(total - got) : peso(got - total));
+      $('cash-change').className = 'font-mono text-xl font-bold ' + (short ? 'text-red-300' : 'text-green-300');
+      $('cash-confirm').disabled = short || sending;
+    }
+    $('cash-received').addEventListener('input', updateChange);
+    $('cash-received').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('cash-confirm').disabled) $('cash-confirm').click(); });
+    $('btn-pay-cash').addEventListener('click', openCash);
+    $('cash-cancel').addEventListener('click', () => { if (!sending) $('cash-modal').classList.add('hidden'); });
+    $('cash-confirm').addEventListener('click', async () => {
+      if (sending || !cart.length) return;
+      const btn = $('cash-confirm');
+      sending = true; btn.disabled = true; btn.textContent = 'Sending…';
+      $('cash-error').classList.add('hidden');
+      try {
+        const order = await createOrder('cash');
+        $('cash-modal').classList.add('hidden');
+        orderSent(order, 'Cash');
+      } catch (e) {
+        if (e.isAuth) { $('cash-modal').classList.add('hidden'); return; }
+        $('cash-error').textContent = e.message + ' Not sent — try again.';
+        $('cash-error').classList.remove('hidden');
+      } finally {
+        sending = false; btn.textContent = 'Confirm & send to bar'; updateChange();
+      }
     });
 
-    // ---- GCash Upload Flow with Local Compression ----
-    $('btn-pay-gcash').addEventListener('click', () => {
+    // ---- GCASH ----
+    // The order is created once. If the receipt upload then fails, retrying only re-uploads
+    // the photo, so the bar never gets the same order twice.
+    let pendingGcashOrder = null;   // { id, total_amount } once the order exists
+
+    function gcashBusy(text) {
+      const busy = !!text;
+      $('upload-status').classList.toggle('hidden', !busy);
+      if (busy) $('upload-status').textContent = text;
+      ['btn-camera', 'btn-gcash-nophoto', 'btn-close-modal'].forEach((id) => $(id).classList.toggle('hidden', busy));
+    }
+    function gcashError(msg) {
+      $('gcash-error').textContent = msg || '';
+      $('gcash-error').classList.toggle('hidden', !msg);
+    }
+    function openGcash() {
       if (!cart.length) return;
+      $('gcash-total').textContent = peso(pendingGcashOrder ? pendingGcashOrder.total_amount : cartTotal());
+      gcashError(pendingGcashOrder ? 'Order ' + shortCode(pendingGcashOrder.id) + ' is already at the bar. Only the receipt photo is missing.' : '');
+      $('btn-camera').textContent = pendingGcashOrder ? '📸 Retake receipt photo' : '📸 Open Camera for Receipt';
+      $('btn-gcash-nophoto').textContent = pendingGcashOrder ? 'Finish without photo' : 'Send without photo';
+      gcashBusy('');
       $('gcash-modal').classList.remove('hidden');
-    });
+    }
+    function reopenPendingGcash() {
+      showToast('Finish the GCash order first.', 'error');
+      openGcash();
+    }
+    $('btn-pay-gcash').addEventListener('click', openGcash);
 
     $('btn-close-modal').addEventListener('click', () => {
+      if (pendingGcashOrder) {
+        if (!confirm('Order ' + shortCode(pendingGcashOrder.id) + ' is already at the bar without a receipt photo. Close and start a new ticket?')) return;
+        const o = pendingGcashOrder;
+        $('gcash-modal').classList.add('hidden');
+        orderSent(o, 'GCash (no photo)');
+        return;
+      }
       $('gcash-modal').classList.add('hidden');
       $('camera-input').value = '';
     });
 
-    $('btn-camera').addEventListener('click', () => {
-      $('camera-input').click();
+    $('btn-camera').addEventListener('click', () => { gcashError(''); $('camera-input').click(); });
+
+    $('btn-gcash-nophoto').addEventListener('click', async () => {
+      if (pendingGcashOrder) {
+        const o = pendingGcashOrder;
+        $('gcash-modal').classList.add('hidden');
+        orderSent(o, 'GCash (no photo)');
+        return;
+      }
+      if (!confirm('Send this GCash order without a receipt photo? Only do this if you saw the payment go through.')) return;
+      gcashBusy('Sending order…');
+      try {
+        const order = await createOrder('gcash');
+        $('gcash-modal').classList.add('hidden');
+        orderSent(order, 'GCash (no photo)');
+      } catch (e) {
+        if (e.isAuth) { $('gcash-modal').classList.add('hidden'); return; }
+        gcashError(e.message + ' Not sent — try again.');
+      } finally {
+        gcashBusy('');
+      }
     });
 
     async function compressImage(file, maxWidth = 1024, quality = 0.7) {
@@ -511,91 +747,67 @@
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-
             if (width > height) {
-              if (width > maxWidth) {
-                height = Math.round(height * (maxWidth / width));
-                width = maxWidth;
-              }
-            } else {
-              if (height > maxWidth) {
-                width = Math.round(width * (maxWidth / height));
-                height = maxWidth;
-              }
+              if (width > maxWidth) { height = Math.round(height * (maxWidth / width)); width = maxWidth; }
+            } else if (height > maxWidth) {
+              width = Math.round(width * (maxWidth / height)); height = maxWidth;
             }
-
             canvas.width = width;
             canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
             canvas.toBlob((blob) => {
-              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
-                type: 'image/jpeg',
-                lastModified: Date.now()
-              });
-              resolve(compressedFile);
+              if (!blob) { reject(new Error('Could not read the photo.')); return; }
+              resolve(new File([blob], 'receipt.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
             }, 'image/jpeg', quality);
           };
-          img.onerror = (err) => reject(err);
+          img.onerror = () => reject(new Error('Could not read the photo. Try again.'));
         };
-        reader.onerror = (err) => reject(err);
+        reader.onerror = () => reject(new Error('Could not read the photo. Try again.'));
       });
     }
 
     $('camera-input').addEventListener('change', async (e) => {
       const originalFile = e.target.files[0];
       if (!originalFile) return;
-      
-      $('upload-status').classList.remove('hidden');
-      $('upload-status').textContent = 'Compressing receipt...';
-      $('btn-camera').classList.add('hidden');
-      $('btn-close-modal').classList.add('hidden');
-      
+      gcashError('');
       try {
-          const compressedFile = await compressImage(originalFile, 1024, 0.7);
-          
-          $('upload-status').textContent = 'Uploading Order & Receipt...';
+        gcashBusy('Compressing receipt…');
+        const photo = await compressImage(originalFile, 1024, 0.7);
 
-          const orderData = await submitOrder('sent', 'gcash', null); 
-          if (!orderData) throw new Error("Failed to create order");
-          
-          const orderId = orderData.id;
-          
-          const formData = new FormData();
-          formData.append('receipt', compressedFile);
-          
-          const headers = await authHeader(); 
-          delete headers['Content-Type']; 
+        if (!pendingGcashOrder) {
+          gcashBusy('Sending order…');
+          const order = await createOrder('gcash');
+          pendingGcashOrder = { id: order.id, total_amount: order.total_amount };
+          saveTicket();
+        }
 
-          const uploadRes = await fetch(API_BASE + `/api/orders/${orderId}/receipt`, {
-              method: 'POST',
-              headers,
-              body: formData
-          });
+        gcashBusy('Uploading receipt…');
+        const formData = new FormData();
+        formData.append('receipt', photo);
+        await api('/api/orders/' + encodeURIComponent(pendingGcashOrder.id) + '/receipt', { method: 'POST', body: formData });
 
-          if (!uploadRes.ok) {
-              const errData = await uploadRes.json().catch(() => ({}));
-              throw new Error(errData.detail || 'Failed to upload receipt');
-          }
-
-          showToast('Sent to bar & receipt saved!');
-          newTicket();
-          $('gcash-modal').classList.add('hidden');
-          
+        const o = pendingGcashOrder;
+        $('gcash-modal').classList.add('hidden');
+        orderSent(o, 'GCash + receipt');
       } catch (err) {
-          alert("Error: " + err.message);
+        if (err.isAuth) { $('gcash-modal').classList.add('hidden'); return; }
+        if (pendingGcashOrder) {
+          gcashError('Order ' + shortCode(pendingGcashOrder.id) + ' is at the bar, but the receipt photo did not upload (' + err.message + '). Retake the photo, or finish without it.');
+          $('btn-camera').textContent = '📸 Retake receipt photo';
+          $('btn-gcash-nophoto').textContent = 'Finish without photo';
+        } else {
+          gcashError(err.message + ' Nothing was sent — try again.');
+        }
       } finally {
-          $('upload-status').classList.add('hidden');
-          $('btn-camera').classList.remove('hidden');
-          $('btn-close-modal').classList.remove('hidden');
-          $('camera-input').value = '';
+        gcashBusy('');
+        $('camera-input').value = '';
       }
     });
 
+    loadTicket();
     renderCategories();
-    renderItems();
     renderCart();
+    if (appVisible && pendingGcashOrder && cart.length) openGcash();
   })();
   </script>
 </body>
