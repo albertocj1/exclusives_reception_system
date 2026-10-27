@@ -131,6 +131,9 @@
           <button data-tab="cancelled" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
             Cancelled
           </button>
+          <button data-tab="comps" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 md:ml-4">
+            Complimentary
+          </button>
           <button data-tab="dashboard" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 md:ml-4">
             Dashboard
           </button>
@@ -170,6 +173,20 @@
         </div>
 
         <!-- Dashboard View -->
+        <!-- Complimentary -->
+        <div id="comps-view" class="hidden">
+          <div class="flex flex-col sm:flex-row gap-3 mb-4 md:mb-6">
+            <input id="comps-search" type="search" autocomplete="off" placeholder="Search table or guest&hellip;"
+                   class="flex-1 bg-brand-slate border border-white/10 rounded-2xl focus:border-brand-gold text-brand-ice text-sm md:text-base px-5 py-3 outline-none placeholder:text-brand-muted/60">
+            <div class="flex gap-1 bg-brand-slate border border-white/10 rounded-full p-1 shrink-0 self-start">
+              <button data-cfilter="left" class="comps-filter font-mono text-[10px] tracking-widest uppercase rounded-full px-4 py-2 bg-brand-gold text-brand-obsidian">Has items left</button>
+              <button data-cfilter="all" class="comps-filter font-mono text-[10px] tracking-widest uppercase rounded-full px-4 py-2 text-brand-muted">All</button>
+            </div>
+          </div>
+          <div id="comps-message" class="hidden text-center text-brand-muted text-sm py-16"></div>
+          <div id="comps-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 items-start"></div>
+        </div>
+
         <div id="dashboard-view" class="hidden flex flex-col gap-4 md:gap-6 max-w-6xl mx-auto">
           <div class="mb-1 md:mb-2 flex flex-col md:flex-row md:items-end md:justify-between gap-3 text-center md:text-left">
             <div>
@@ -229,6 +246,12 @@
             <div id="dash-tables" class="space-y-2"></div>
           </div>
 
+          <!-- Complimentary given -->
+          <div class="bg-brand-slate border border-white/10 rounded-2xl p-4 md:p-6 shadow-lg">
+            <div class="font-mono text-[10px] md:text-xs tracking-widest uppercase text-cyan-300 mb-3 md:mb-4 border-b border-white/5 pb-3 md:pb-4">Complimentary given (not sales)</div>
+            <div id="dash-comps" class="text-sm text-brand-muted">&hellip;</div>
+          </div>
+
           <!-- Top Items List -->
           <div class="bg-brand-slate border border-white/10 rounded-2xl p-4 md:p-6 shadow-lg mt-2">
             <div class="font-mono text-[10px] md:text-xs tracking-widest uppercase text-brand-gold mb-4 md:mb-6 border-b border-white/5 pb-3 md:pb-4 text-center md:text-left">Top Selling Items (Fulfilled)</div>
@@ -242,6 +265,27 @@
     </main>
 
   </div><!-- /#app -->
+
+  <!-- Give complimentary item -->
+  <div id="give-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
+    <div class="bg-brand-slate border border-cyan-400/30 rounded-t-3xl sm:rounded-3xl p-6 w-full sm:max-w-md shadow-2xl">
+      <div class="flex items-start justify-between mb-1">
+        <h3 id="give-title" class="font-serif text-2xl text-brand-ice">Give</h3>
+        <button id="give-close" aria-label="Close" class="text-brand-muted hover:text-brand-ice text-3xl leading-none px-2">&times;</button>
+      </div>
+      <p id="give-sub" class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-5"></p>
+      <div id="give-qty-wrap" class="hidden mb-4">
+        <div class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-2 text-center">How many cans</div>
+        <div class="flex items-center justify-center gap-6">
+          <button id="give-minus" type="button" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none">&minus;</button>
+          <span id="give-qty" class="font-serif text-5xl text-brand-gold w-16 text-center">1</span>
+          <button id="give-plus" type="button" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none">+</button>
+        </div>
+      </div>
+      <div id="give-options" class="grid gap-2"></div>
+      <p id="give-error" class="hidden text-red-300 font-mono text-xs mt-3 text-center"></p>
+    </div>
+  </div>
 
   <!-- Toast Notification -->
   <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-24 opacity-0 transition-all duration-300 bg-brand-slate border border-brand-gold/40 text-brand-ice text-xs md:text-sm font-mono px-5 md:px-6 py-2.5 md:py-3 rounded-full shadow-2xl z-50 pointer-events-none flex items-center gap-2 md:gap-3 whitespace-nowrap">
@@ -467,6 +511,8 @@
         announceNewOrders();
         updateTabCounts();
         renderView();
+        if (activeTab === 'comps') fetchComps();
+        if (activeTab === 'dashboard') fetchCompClaims();
       } catch (err) {
         if (!err.isAuth) lastError = err.message;
       } finally {
@@ -542,8 +588,15 @@
     $('order-search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; searchTerm = ''; renderView(); } });
 
     function renderView() {
-      $('search-wrap').classList.toggle('hidden', activeTab === 'dashboard');
-      if (activeTab === 'dashboard') {
+      $('search-wrap').classList.toggle('hidden', activeTab === 'dashboard' || activeTab === 'comps');
+      $('comps-view').classList.toggle('hidden', activeTab !== 'comps');
+      if (activeTab === 'comps') {
+        $('orders-grid').classList.add('hidden');
+        $('empty-state').classList.add('hidden');
+        $('dashboard-view').classList.add('hidden');
+        $('dashboard-view').classList.remove('flex');
+        renderComps();
+      } else if (activeTab === 'dashboard') {
         $('orders-grid').classList.add('hidden');
         $('empty-state').classList.add('hidden');
         $('dashboard-view').classList.remove('hidden');
@@ -555,6 +608,250 @@
         $('orders-grid').classList.remove('hidden');
         renderGrid();
       }
+    }
+
+    // ---------------- COMPLIMENTARY ----------------
+    // Free bottles / food / cans per booking. Allowances and picks come from the backend;
+    // the backend refuses anything over the allowance or before check-in.
+    const SPOT_NAMES = { LC1: 'SVIP 1', LC2: 'SVIP 2', LC3: 'SVIP 3', LC5: 'SVIP 4', LC6: 'SVIP 5', LC4: 'VIP 1', LC7: 'VIP 2', DC1: 'VIP 3', DC2: 'VIP 4', DT1: 'Table 1', DT2: 'Table 2', DT3: 'Table 3', DT4: 'Table 4' };
+    const TYPE_LABEL = { bottle: 'Bottle', food: 'Food', can: 'Cans' };
+    let comps = null;              // { bookings, options } from /api/comps
+    let compsError = '';
+    let compClaims = null;         // all active claims, for the dashboard
+    let compsFilter = 'left';
+    let compsQuery = '';
+    let compsFetching = false;
+
+    const spotOf = (b) => (b.table_id ? (SPOT_NAMES[b.table_id] || b.table_id) : 'No table');
+
+    async function fetchComps() {
+      if (compsFetching || !appVisible) return;
+      compsFetching = true;
+      try {
+        comps = await apiFetch('/api/comps');
+        compsError = '';
+      } catch (err) {
+        if (!err.isAuth) compsError = err.message;
+      } finally {
+        compsFetching = false;
+        if (activeTab === 'comps') renderComps();
+      }
+    }
+
+    async function fetchCompClaims() {
+      try {
+        const d = await apiFetch('/api/comps/claims');
+        compClaims = Array.isArray(d && d.claims) ? d.claims : [];
+      } catch (err) {
+        compClaims = null;
+      }
+      if (activeTab === 'dashboard') renderCompsSummary();
+    }
+
+    function picksLine(b) {
+      const parts = [];
+      if (b.allowance.bottle) parts.push(b.picks.bottles && b.picks.bottles.length ? b.picks.bottles.join(' + ') : 'bottle not chosen');
+      if (b.allowance.food) parts.push(b.picks.food || 'food not chosen');
+      return parts.join(' · ');
+    }
+
+    function compMatches(b) {
+      const q = fold(compsQuery.trim());
+      if (q) {
+        const hay = fold([spotOf(b), b.table_id || '', b.full_name, b.package, b.ticket_code || ''].join(' '));
+        if (hay.indexOf(q) === -1) return false;
+      }
+      if (compsFilter === 'left') return b.remaining.bottle + b.remaining.food + b.remaining.can > 0;
+      return true;
+    }
+
+    function renderComps() {
+      const msg = $('comps-message');
+      const grid = $('comps-grid');
+      if (!comps) {
+        msg.textContent = compsError ? 'Cannot load complimentary list: ' + compsError : 'Loading…';
+        msg.classList.remove('hidden'); grid.innerHTML = '';
+        return;
+      }
+      const list = comps.bookings.filter(compMatches)
+        // Checked-in tables first, then by table.
+        .sort((a, b) => (b.checked_in - a.checked_in) || spotOf(a).localeCompare(spotOf(b), undefined, { numeric: true }));
+      msg.classList.toggle('hidden', list.length > 0);
+      if (!list.length) {
+        const q = compsQuery.trim();
+        // Tables that match but have received everything are hidden by "Has items left".
+        const hiddenDone = compsFilter === 'left' && comps.bookings.some((b) => { compsFilter = 'all'; const m = compMatches(b); compsFilter = 'left'; return m; });
+        msg.textContent = hiddenDone
+          ? (q ? '\u201c' + q + '\u201d' : 'Every table') + ' has received everything. Tap \u201cAll\u201d to see what was given.'
+          : (q ? 'No table or guest matches \u201c' + q + '\u201d.' : 'No bookings with complimentary items.');
+      }
+
+      grid.innerHTML = list.map((b) => {
+        const row = (t) => {
+          const total = b.allowance[t];
+          if (!total) return '';
+          const left = b.remaining[t];
+          const can = b.checked_in && left > 0;
+          return `<div class="flex items-center justify-between gap-3 py-2 border-b border-white/5 last:border-0">
+            <div>
+              <div class="text-brand-ice text-sm">${TYPE_LABEL[t]}</div>
+              <div class="font-mono text-[11px] ${left ? 'text-brand-gold' : 'text-brand-muted'}">${left} of ${total} left</div>
+            </div>
+            <button data-give="${esc(b.id)}" data-type="${t}" ${can ? '' : 'disabled'}
+              class="font-mono text-[10px] tracking-widest uppercase rounded-xl px-4 py-3 border transition-colors ${can ? 'border-cyan-400/50 text-cyan-200 bg-cyan-400/10 hover:bg-cyan-400/20' : 'border-white/10 text-brand-muted opacity-40'}">
+              ${left ? 'Give ' + TYPE_LABEL[t].toLowerCase() : 'All given'}
+            </button>
+          </div>`;
+        };
+        const history = (b.claims || []).slice().reverse().map((c) => `
+          <div class="flex items-center justify-between gap-2 text-[11px] py-1">
+            <span class="text-brand-muted">${new Date(c.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span class="flex-1 text-brand-ice truncate">${c.qty > 1 ? c.qty + '× ' : ''}${esc(c.item_name || TYPE_LABEL[c.item_type])}${c.item_type === 'can' && c.item_name ? ' (can)' : ''}</span>
+            <button data-undo="${esc(c.claim_id)}" data-who="${esc(spotOf(b) + ' · ' + b.full_name)}" data-what="${esc((c.qty > 1 ? c.qty + '× ' : '') + (c.item_name || TYPE_LABEL[c.item_type]))}" class="font-mono text-[10px] uppercase tracking-widest text-red-300 hover:text-red-200">Undo</button>
+          </div>`).join('');
+        const done = b.remaining.bottle + b.remaining.food + b.remaining.can === 0;
+        return `<div class="bg-brand-slate border ${b.checked_in ? (done ? 'border-white/10' : 'border-cyan-400/40') : 'border-white/10'} rounded-2xl p-4 md:p-5 ${done ? 'opacity-70' : ''}">
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <div class="min-w-0">
+              <div class="font-serif text-xl text-brand-ice">${esc(spotOf(b))}</div>
+              <div class="text-brand-muted text-xs truncate">${esc(b.full_name)} · ${esc(b.package)}</div>
+            </div>
+            ${b.checked_in
+              ? '<span class="font-mono text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-emerald-400/50 text-emerald-300 shrink-0">Checked in</span>'
+              : '<span class="font-mono text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-amber-400/50 text-amber-300 shrink-0">Not checked in</span>'}
+          </div>
+          <div class="text-[12px] mb-3 ${b.picks.bottles.length || b.picks.food ? 'text-cyan-300' : 'text-amber-300'}">Picks: ${esc(picksLine(b))}</div>
+          ${b.checked_in ? '' : '<div class="text-amber-200 text-xs font-mono bg-amber-400/10 border border-amber-400/30 rounded-lg p-2 mb-2">Send to reception to check in first.</div>'}
+          ${row('bottle')}${row('food')}${row('can')}
+          ${history ? `<div class="mt-3 pt-2 border-t border-white/5"><div class="font-mono text-[9px] tracking-widest uppercase text-brand-muted mb-1">Given</div>${history}</div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    $('comps-search').addEventListener('input', (e) => { compsQuery = e.target.value; renderComps(); });
+    document.querySelectorAll('.comps-filter').forEach((btn) => btn.addEventListener('click', () => {
+      compsFilter = btn.getAttribute('data-cfilter');
+      document.querySelectorAll('.comps-filter').forEach((b) => {
+        const on = b === btn;
+        b.classList.toggle('bg-brand-gold', on); b.classList.toggle('text-brand-obsidian', on); b.classList.toggle('text-brand-muted', !on);
+      });
+      renderComps();
+    }));
+
+    // ---- give flow ----
+    let giving = null;   // { booking, type, qty }
+    function openGive(booking, type) {
+      giving = { booking, type, qty: 1 };
+      const left = booking.remaining[type];
+      $('give-title').textContent = 'Give ' + TYPE_LABEL[type].toLowerCase();
+      $('give-sub').textContent = spotOf(booking) + ' · ' + booking.full_name + ' · ' + left + ' left';
+      $('give-error').classList.add('hidden');
+      $('give-qty-wrap').classList.toggle('hidden', type !== 'can');
+      if (type === 'can') { giving.qty = left; $('give-qty').textContent = left; }
+
+      const options = (comps && comps.options && comps.options[type]) || [];
+      const picked = type === 'bottle' ? (booking.picks.bottles || []) : type === 'food' ? [booking.picks.food].filter(Boolean) : [];
+      // Picked items first; for bottles, only the picks not yet given count as "picked".
+      const givenNames = (booking.claims || []).filter((c) => c.item_type === type).map((c) => c.item_name);
+      const stillPicked = picked.slice();
+      givenNames.forEach((n) => { const i = stillPicked.indexOf(n); if (i !== -1) stillPicked.splice(i, 1); });
+      const ordered = stillPicked.filter((o, i) => stillPicked.indexOf(o) === i).concat(options.filter((o) => stillPicked.indexOf(o) === -1));
+      $('give-options').innerHTML = ordered.map((o) => {
+        const isPick = stillPicked.indexOf(o) !== -1;
+        return `<button type="button" data-opt="${esc(o)}" class="w-full text-left rounded-xl px-4 py-4 border ${isPick ? 'border-cyan-400 bg-cyan-400/15 text-cyan-100' : 'border-white/10 text-brand-ice hover:border-brand-gold'} transition-colors">
+          <span class="text-base">${esc(o)}</span>${isPick ? '<span class="float-right font-mono text-[10px] tracking-widest uppercase text-cyan-300">Their pick</span>' : ''}
+        </button>`;
+      }).join('') + (type === 'can' ? '<button type="button" data-opt="" class="w-full rounded-xl px-4 py-4 border border-white/10 text-brand-muted hover:border-brand-gold">Mixed / any</button>' : '');
+      $('give-modal').classList.remove('hidden');
+    }
+    function closeGive() { giving = null; $('give-modal').classList.add('hidden'); }
+    $('give-close').addEventListener('click', closeGive);
+    $('give-modal').addEventListener('click', (e) => { if (e.target === $('give-modal')) closeGive(); });
+    $('give-minus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.max(1, giving.qty - 1); $('give-qty').textContent = giving.qty; });
+    $('give-plus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.min(giving.booking.remaining.can, giving.qty + 1); $('give-qty').textContent = giving.qty; });
+
+    $('give-options').addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-opt]');
+      if (!btn || !giving || btn.disabled) return;
+      const g = giving;
+      const name = btn.getAttribute('data-opt') || null;
+      $('give-options').querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      btn.textContent = 'Saving…';
+      try {
+        const updated = await apiFetch('/api/comps/' + encodeURIComponent(g.booking.id) + '/claim', 'POST',
+          { item_type: g.type, item_name: name, qty: g.type === 'can' ? g.qty : 1 });
+        replaceComp(updated);
+        closeGive();
+        showToast('Given: ' + (g.type === 'can' ? g.qty + '× ' + (name || 'can') : name) + ' → ' + spotOf(g.booking));
+      } catch (err) {
+        if (err.isAuth) return;
+        $('give-error').textContent = err.message;
+        $('give-error').classList.remove('hidden');
+        $('give-options').querySelectorAll('button').forEach((b) => { b.disabled = false; });
+        btn.textContent = name || 'Mixed / any';
+        fetchComps();   // someone else may have given it; refresh what's left
+      }
+    });
+
+    function replaceComp(updated) {
+      if (!comps || !updated) return;
+      const i = comps.bookings.findIndex((x) => String(x.id) === String(updated.id));
+      if (i !== -1) comps.bookings[i] = updated;
+      renderComps();
+    }
+
+    $('comps-grid').addEventListener('click', async (e) => {
+      const give = e.target.closest('[data-give]');
+      if (give && !give.disabled) {
+        const b = comps && comps.bookings.find((x) => String(x.id) === give.getAttribute('data-give'));
+        if (b) openGive(b, give.getAttribute('data-type'));
+        return;
+      }
+      const undo = e.target.closest('[data-undo]');
+      if (undo) {
+        if (!confirm('Undo "' + undo.getAttribute('data-what') + '" for ' + undo.getAttribute('data-who') + '?\n\nOnly undo if it was NOT actually handed over.')) return;
+        undo.disabled = true; undo.textContent = '…';
+        try {
+          replaceComp(await apiFetch('/api/comps/claims/' + encodeURIComponent(undo.getAttribute('data-undo')) + '/undo', 'POST'));
+          showToast('Undone');
+        } catch (err) {
+          if (!err.isAuth) showToast('Not undone: ' + err.message, 'error');
+          fetchComps();
+        }
+      }
+    });
+
+    // ---- dashboard summary ----
+    function compsInPeriod() {
+      if (!compClaims) return null;
+      const h = periodHours();
+      const since = h ? Date.now() - h * 3600 * 1000 : 0;
+      return compClaims.filter((c) => new Date(c.created_at).getTime() >= since);
+    }
+    function compsTally(list) {
+      const out = { bottle: {}, food: {}, can: {} };
+      list.forEach((c) => {
+        const key = c.item_name || (c.item_type === 'can' ? 'Mixed' : '?');
+        out[c.item_type][key] = (out[c.item_type][key] || 0) + 1;
+      });
+      return out;
+    }
+    function renderCompsSummary() {
+      const el = $('dash-comps');
+      const list = compsInPeriod();
+      if (!list) { el.textContent = 'Complimentary tracking not available yet.'; return; }
+      if (!list.length) { el.textContent = 'None given in this period.'; return; }
+      const t = compsTally(list);
+      const block = (type, label) => {
+        const entries = Object.entries(t[type]).sort((a, b) => b[1] - a[1]);
+        const total = entries.reduce((s, e) => s + e[1], 0);
+        if (!total) return '';
+        return `<div class="flex items-start justify-between gap-4 py-2 border-b border-white/5 last:border-0">
+          <div class="text-brand-ice">${label} <span class="font-mono text-cyan-300">${total}</span></div>
+          <div class="text-right text-xs text-brand-muted">${entries.map(([n, q]) => esc(n) + ' ×' + q).join('<br>')}</div>
+        </div>`;
+      };
+      el.innerHTML = block('bottle', 'Bottles') + block('food', 'Food') + block('can', 'Cans');
     }
 
     // ---------------- DASHBOARD ----------------
@@ -634,6 +931,8 @@
       $('dash-orders').textContent = count;
       $('dash-aov').textContent = peso(count ? Math.round(s.total / count) : 0);
 
+      renderCompsSummary();
+
       $('dash-tables').innerHTML = s.tables.length ? s.tables.map((t) => `
         <button type="button" data-table="${esc(t.table)}" class="w-full text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-brand-gold/40 transition-colors">
           <div class="min-w-0">
@@ -688,8 +987,13 @@
       btn.disabled = true; btn.textContent = 'Preparing…';
       try {
         const all = await apiFetch('/api/orders?limit=5000');
+        let claimsAll = [];
+        try { const d = await apiFetch('/api/comps/claims'); claimsAll = Array.isArray(d && d.claims) ? d.claims : []; } catch (e) { if (e.isAuth) throw e; }
+        const hh = periodHours();
+        const compList = claimsAll.filter((c) => !hh || new Date(c.created_at).getTime() >= Date.now() - hh * 3600 * 1000)
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const list = inPeriod(Array.isArray(all) ? all : []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        if (!list.length) { alert('No orders in this period.'); return; }
+        if (!list.length && !compList.length) { alert('No orders or complimentary items in this period.'); return; }
         const s = summarise(list);
         const when = (iso) => new Date(iso).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         const statusName = { sent: 'Waiting', fulfilled: 'Served', cancelled: 'Cancelled', held: 'Held' };
@@ -697,8 +1001,8 @@
         const summary = [
           ['EXCLUSIVES PH — BAR SALES'],
           ['Period', $('dash-period').selectedOptions[0].textContent],
-          ['From', when(list[0].created_at)],
-          ['To', when(list[list.length - 1].created_at)],
+          ['From', list.length ? when(list[0].created_at) : '-'],
+          ['To', list.length ? when(list[list.length - 1].created_at) : '-'],
           ['Exported', when(new Date().toISOString())],
           [],
           ['', 'Orders', 'Amount (PHP)'],
@@ -710,7 +1014,16 @@
           ['Still waiting (not served)', s.waiting.length, s.waiting.reduce((t, o) => t + (o.total_amount || 0), 0)],
           ['Cancelled', s.cancelled.length, s.cancelled.reduce((t, o) => t + (o.total_amount || 0), 0)],
           ['GCash orders without receipt photo', list.filter((o) => o.payment_method === 'gcash' && o.status !== 'cancelled' && !o.receipt_url).length],
-        ];
+          [],
+          ['COMPLIMENTARY GIVEN (not sales)', 'Qty'],
+        ].concat((() => {
+          const t = compsTally(compList);
+          const rows = [];
+          [['bottle', 'Bottle'], ['food', 'Food'], ['can', 'Cans']].forEach(([k, label]) => {
+            Object.entries(t[k]).sort((a, b) => b[1] - a[1]).forEach(([n, q]) => rows.push([label + ' \u2014 ' + n, q]));
+          });
+          return rows.length ? rows : [['None', 0]];
+        })());
 
         const orderRows = [['Code', 'Time', 'Table', 'Guest', 'Items', 'Total (PHP)', 'Payment', 'Status', 'Receipt', 'Notes']].concat(list.map((o) => {
           const t = tableOf(o);
@@ -734,6 +1047,18 @@
         add(orderRows, 'Orders', [8, 20, 12, 16, 50, 12, 9, 10, 40, 30]);
         add(tableRows, 'Per table', [14, 30, 14, 12, 12, 18, 14, 14]);
         add(itemRows, 'Items', [32, 12, 14]);
+        // One row per "give" (e.g. 4 cans at once), not per can.
+        const gives = [];
+        const byClaim = {};
+        compList.forEach((c) => {
+          if (byClaim[c.claim_id]) { byClaim[c.claim_id].qty++; return; }
+          byClaim[c.claim_id] = Object.assign({}, c, { qty: 1 });
+          gives.push(byClaim[c.claim_id]);
+        });
+        add([['Time', 'Table', 'Booker', 'Package', 'Type', 'Item', 'Qty', 'Given by']].concat(gives.map((c) => [
+          when(c.created_at), c.table_id ? (SPOT_NAMES[c.table_id] || c.table_id) : 'No table', c.full_name || '', c.package || '',
+          TYPE_LABEL[c.item_type] || c.item_type, c.item_name || (c.item_type === 'can' ? 'Mixed' : ''), c.qty, c.given_by || '',
+        ])), 'Complimentary', [20, 10, 22, 18, 8, 28, 6, 26]);
 
         const d = new Date();
         const pad = (n) => String(n).padStart(2, '0');
@@ -889,6 +1214,8 @@
         target.classList.add('active', 'border-brand-gold', 'bg-brand-goldDim/20', 'text-brand-gold');
         activeTab = target.getAttribute('data-tab');
         renderView();
+        if (activeTab === 'comps') fetchComps();
+        if (activeTab === 'dashboard') fetchCompClaims();
       });
     });
 
