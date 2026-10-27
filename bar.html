@@ -624,7 +624,8 @@
     let compsQuery = '';
     let compsFetching = false;
 
-    const spotOf = (b) => (b.table_id ? (SPOT_NAMES[b.table_id] || b.table_id) : (b.package === 'Entrance Fee' ? 'Entrance' : 'No table'));
+    const spotOf = (b) => (b.table_id ? (SPOT_NAMES[b.table_id] || b.table_id)
+      : b.package === 'Entrance Fee' ? 'Entrance' : b.package === '6-Pax Bottle Bundle' ? '6-Pax bundle' : 'No table');
 
     async function fetchComps() {
       if (compsFetching || !appVisible) return;
@@ -660,7 +661,7 @@
     function compMatches(b) {
       const q = fold(compsQuery.trim());
       if (q) {
-        const hay = fold([spotOf(b), b.table_id || '', b.full_name, b.package, b.ticket_code || ''].join(' '));
+        const hay = fold([spotOf(b), b.table_id || '', b.full_name, b.package, b.ticket_code || ''].concat((b.people || []).map((p) => p.name)).join(' '));
         if (hay.indexOf(q) === -1) return false;
       }
       if (compsFilter === 'left') return leftTotal(b) > 0;
@@ -709,7 +710,7 @@
         const history = (b.claims || []).slice().reverse().map((c) => `
           <div class="flex items-center justify-between gap-2 text-[11px] py-1">
             <span class="text-brand-muted">${new Date(c.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
-            <span class="flex-1 text-brand-ice truncate">${c.qty > 1 ? c.qty + '× ' : ''}${esc(c.item_type === 'drink' ? 'Cocktail' + (c.qty > 1 ? 's' : '') : (c.item_name || TYPE_LABEL[c.item_type]))}${c.item_type === 'can' && c.item_name ? ' (can)' : ''}</span>
+            <span class="flex-1 text-brand-ice truncate">${c.qty > 1 ? c.qty + '× ' : ''}${esc(c.item_type === 'drink' ? 'Cocktail' + (c.qty > 1 ? 's' : '') : (c.item_name || TYPE_LABEL[c.item_type]))}${c.item_type === 'can' && c.item_name ? ' (can)' : ''}${c.guest_name ? ' \u00b7 ' + esc(c.guest_name) : ''}</span>
             <button data-undo="${esc(c.claim_id)}" data-who="${esc(spotOf(b) + ' · ' + b.full_name)}" data-what="${esc((c.qty > 1 ? c.qty + '× ' : '') + (c.item_name || TYPE_LABEL[c.item_type]))}" class="font-mono text-[10px] uppercase tracking-widest text-red-300 hover:text-red-200">Undo</button>
           </div>`).join('');
         const done = leftTotal(b) === 0;
@@ -725,10 +726,38 @@
           </div>
           ${b.allowance.bottle || b.allowance.food ? `<div class="text-[12px] mb-3 ${b.picks.bottles.length || b.picks.food ? 'text-cyan-300' : 'text-amber-300'}">Picks: ${esc(picksLine(b))}</div>` : ''}
           ${b.checked_in ? '' : '<div class="text-amber-200 text-xs font-mono bg-amber-400/10 border border-amber-400/30 rounded-lg p-2 mb-2">Send to reception to check in first.</div>'}
-          ${row('bottle')}${row('food')}${row('can')}${row('drink')}
+          ${row('bottle')}${row('food')}${row('can')}${b.drinks_per_guest ? peopleRows(b) : row('drink')}
+          ${!b.drinks_per_guest && (b.people || []).length ? `<div class="text-[11px] text-brand-muted mt-1">Guests: ${b.people.map((p) => esc(p.name)).join(', ')}</div>` : ''}
           ${history ? `<div class="mt-3 pt-2 border-t border-white/5"><div class="font-mono text-[9px] tracking-widest uppercase text-brand-muted mb-1">Given</div>${history}</div>` : ''}
         </div>`;
       }).join('');
+    }
+
+    // One line per checked-in guest with their own cocktails (Entrance / 6-Pax, names ticked at check-in).
+    function peopleRows(b) {
+      const q = fold(compsQuery.trim());
+      const t = (iso) => new Date(iso).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+      return `<div class="pt-2">
+        <div class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-1">Cocktails &middot; ${b.drinks_per_person} per person</div>
+        ${b.people.map((p) => {
+          const hit = q && fold(p.name).indexOf(q) !== -1;
+          let status, button = '';
+          if (!p.inside) {
+            status = '<span class="text-brand-muted">not checked in</span>';
+          } else if (p.left > 0) {
+            status = `<span class="text-brand-gold">${p.left} of ${b.drinks_per_person} left</span>`;
+            button = `<button data-give="${esc(b.id)}" data-type="drink" data-guest="${p.index}" class="font-mono text-[10px] tracking-widest uppercase rounded-xl px-4 py-2.5 border border-cyan-400/50 text-cyan-200 bg-cyan-400/10 hover:bg-cyan-400/20">Give</button>`;
+          } else {
+            status = `<span class="text-emerald-300">${p.given} of ${b.drinks_per_person} given${p.last_at ? ' \u00b7 ' + t(p.last_at) : ''}</span>`;
+          }
+          return `<div class="flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 rounded-lg ${hit ? 'bg-brand-goldDim' : ''}">
+            <div class="min-w-0">
+              <div class="text-sm ${p.inside ? 'text-brand-ice' : 'text-brand-muted'} truncate">${p.inside ? '&check; ' : ''}${esc(p.name)}</div>
+              <div class="font-mono text-[11px]">${status}</div>
+            </div>${button}
+          </div>`;
+        }).join('')}
+      </div>`;
     }
 
     $('comps-search').addEventListener('input', (e) => { compsQuery = e.target.value; renderComps(); });
@@ -743,17 +772,18 @@
 
     // ---- give flow ----
     let giving = null;   // { booking, type, qty }
-    function openGive(booking, type) {
-      giving = { booking, type, qty: 1 };
-      const left = booking.remaining[type];
-      $('give-title').textContent = 'Give ' + TYPE_LABEL[type].toLowerCase();
-      $('give-sub').textContent = spotOf(booking) + ' · ' + booking.full_name + ' · ' + left + ' left';
+    function openGive(booking, type, guestIndex) {
+      const person = guestIndex == null ? null : (booking.people || []).find((p) => p.index === guestIndex);
+      giving = { booking, type, qty: 1, person };
+      const left = person ? person.left : booking.remaining[type];
+      $('give-title').textContent = 'Give ' + TYPE_LABEL[type].toLowerCase() + (person ? ' \u2014 ' + person.name : '');
+      $('give-sub').textContent = spotOf(booking) + ' · ' + booking.full_name + ' · ' + left + ' left' + (person ? ' for ' + person.name : '');
       $('give-error').classList.add('hidden');
       $('give-qty-wrap').classList.toggle('hidden', QTY_TYPES.indexOf(type) === -1);
       $('give-qty-wrap').querySelector('.font-mono').textContent = type === 'drink' ? 'How many cocktails' : 'How many cans';
       // Cans: all at once by default. Cocktails: one person's share (2) by default.
       if (type === 'can') giving.qty = left;
-      if (type === 'drink') giving.qty = Math.min(left, booking.drinks_per_person || 1);
+      if (type === 'drink') giving.qty = person ? left : Math.min(left, booking.drinks_per_person || 1);
       $('give-qty').textContent = giving.qty;
 
       const options = (comps && comps.options && comps.options[type]) || [];
@@ -775,7 +805,7 @@
     $('give-close').addEventListener('click', closeGive);
     $('give-modal').addEventListener('click', (e) => { if (e.target === $('give-modal')) closeGive(); });
     $('give-minus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.max(1, giving.qty - 1); $('give-qty').textContent = giving.qty; });
-    $('give-plus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.min(giving.booking.remaining[giving.type], giving.qty + 1); $('give-qty').textContent = giving.qty; });
+    $('give-plus').addEventListener('click', () => { if (!giving) return; giving.qty = Math.min(giving.person ? giving.person.left : giving.booking.remaining[giving.type], giving.qty + 1); $('give-qty').textContent = giving.qty; });
 
     $('give-options').addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-opt]');
@@ -786,11 +816,11 @@
       btn.textContent = 'Saving…';
       try {
         const updated = await apiFetch('/api/comps/' + encodeURIComponent(g.booking.id) + '/claim', 'POST',
-          { item_type: g.type, item_name: name, qty: QTY_TYPES.indexOf(g.type) !== -1 ? g.qty : 1 });
+          { item_type: g.type, item_name: name, qty: QTY_TYPES.indexOf(g.type) !== -1 ? g.qty : 1, guest_index: g.person ? g.person.index : null });
         replaceComp(updated);
         closeGive();
         const what = g.type === 'drink' ? g.qty + '\u00d7 cocktail' + (g.qty > 1 ? 's' : '') : g.type === 'can' ? g.qty + '\u00d7 ' + (name || 'can') : name;
-        showToast('Given: ' + what + ' \u2192 ' + spotOf(g.booking) + (g.booking.table_id ? '' : ' \u00b7 ' + g.booking.full_name));
+        showToast('Given: ' + what + ' \u2192 ' + (g.person ? g.person.name + ' (' + spotOf(g.booking) + ')' : spotOf(g.booking) + (g.booking.table_id ? '' : ' \u00b7 ' + g.booking.full_name)));
       } catch (err) {
         if (err.isAuth) return;
         $('give-error').textContent = err.message;
@@ -812,7 +842,7 @@
       const give = e.target.closest('[data-give]');
       if (give && !give.disabled) {
         const b = comps && comps.bookings.find((x) => String(x.id) === give.getAttribute('data-give'));
-        if (b) openGive(b, give.getAttribute('data-type'));
+        if (b) openGive(b, give.getAttribute('data-type'), give.hasAttribute('data-guest') ? parseInt(give.getAttribute('data-guest'), 10) : null);
         return;
       }
       const undo = e.target.closest('[data-undo]');
@@ -1063,10 +1093,10 @@
           byClaim[c.claim_id] = Object.assign({}, c, { qty: 1 });
           gives.push(byClaim[c.claim_id]);
         });
-        add([['Time', 'Table', 'Booker', 'Package', 'Type', 'Item', 'Qty', 'Given by']].concat(gives.map((c) => [
-          when(c.created_at), spotOf(c), c.full_name || '', c.package || '',
+        add([['Time', 'Table', 'Booker', 'Guest', 'Package', 'Type', 'Item', 'Qty', 'Given by']].concat(gives.map((c) => [
+          when(c.created_at), spotOf(c), c.full_name || '', c.guest_name || '', c.package || '',
           TYPE_LABEL[c.item_type] || c.item_type, c.item_name || (c.item_type === 'can' ? 'Mixed' : ''), c.qty, c.given_by || '',
-        ])), 'Complimentary', [20, 10, 22, 18, 8, 28, 6, 26]);
+        ])), 'Complimentary', [20, 10, 22, 18, 18, 8, 28, 6, 26]);
 
         const d = new Date();
         const pad = (n) => String(n).padStart(2, '0');
