@@ -147,6 +147,7 @@
       </div>
 
       <div class="flex items-center gap-2 md:gap-3 ml-auto md:ml-0">
+        <button id="btn-map" class="font-mono text-[9px] md:text-[11px] tracking-widest uppercase text-brand-ice border border-white/20 hover:border-brand-gold rounded-full px-3 py-1.5 md:px-4 md:py-2 transition-colors">Map</button>
         <button id="btn-orders" class="relative font-mono text-[9px] md:text-[11px] tracking-widest uppercase text-brand-ice border border-white/20 hover:border-brand-gold rounded-full px-3 py-1.5 md:px-4 md:py-2 transition-colors">
           Orders <span id="orders-badge" class="hidden ml-1 bg-brand-gold text-brand-obsidian rounded-full px-1.5 font-bold">0</span>
         </button>
@@ -208,6 +209,8 @@
                    class="w-full bg-brand-slate border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm px-3 py-2.5 outline-none placeholder:text-brand-muted/60">
           </label>
         </div>
+        <!-- Where the chosen table is on the yacht -->
+        <button id="table-map" type="button" class="hidden w-full text-left bg-brand-slate border border-white/10 rounded-xl p-2 mb-4 hover:border-brand-gold transition-colors" aria-label="Open the full yacht map"></button>
 
         <div id="cart-empty" class="flex-1 flex items-center justify-center text-center py-6 md:py-10">
           <p class="text-brand-muted text-xs md:text-sm font-light max-w-[220px]">No items yet — tap the menu to start a ticket.</p>
@@ -237,6 +240,19 @@
   </div>
 
   </div><!-- /#app -->
+
+  <!-- ================= YACHT MAP ================= -->
+  <div id="map-modal" class="fixed inset-0 bg-black/85 hidden z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
+    <div class="bg-brand-slate border border-white/10 rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto shadow-2xl">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="font-serif text-2xl text-brand-ice">Yacht map</h3>
+        <button id="map-close" aria-label="Close" class="text-brand-muted hover:text-brand-ice text-3xl leading-none px-2">&times;</button>
+      </div>
+      <p class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-4">Tap a table to use it for this ticket &middot; front of the yacht is on the right</p>
+      <div id="map-decks" class="space-y-5"></div>
+      <div id="map-unplaced" class="mt-4 font-mono text-[11px] text-amber-300"></div>
+    </div>
+  </div>
 
   <!-- ================= RECENT ORDERS ================= -->
   <div id="orders-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
@@ -604,6 +620,7 @@
       $('cart-lines').querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => removeLine(b.getAttribute('data-remove'))));
 
       $('total').textContent = peso(cartTotal());
+      renderTableMap();
       $('ticket-number').textContent = hasItems ? cart.reduce((n, l) => n + l.qty, 0) + ' item' + (cart.reduce((n, l) => n + l.qty, 0) === 1 ? '' : 's') : 'New ticket';
       renderItems();
       saveTicket();
@@ -854,6 +871,138 @@
         $('camera-input').value = '';
       }
     });
+
+    // ---------------- YACHT MAP ----------------
+    // Sketch of the Lower and Main deck floor plans (front of the yacht on the right),
+    // so servers can find a table. Positions follow the published floor plans.
+    const HULL = 'M20,30 L700,30 Q860,38 940,150 Q860,262 700,270 L20,270 Q8,270 8,256 L8,44 Q8,30 20,30 Z';
+    const DECKS = [
+      {
+        key: 'lower', name: 'Lower deck',
+        marks: [
+          { t: 'text', x: 34, y: 150, label: 'ENTRANCE', rotate: true },
+          { t: 'rect', x: 66, y: 112, w: 26, h: 76, label: 'RECEPTION', rotate: true },
+          { t: 'stairs', x: 186, y: 72 }, { t: 'stairs', x: 186, y: 228 },
+          { t: 'line', x1: 214, y1: 62, x2: 560, y2: 62 }, { t: 'line', x1: 214, y1: 238, x2: 560, y2: 238 },
+          { t: 'oval', cx: 520, cy: 150, rx: 20, ry: 50, label: 'EXEC TABLE' },
+        ],
+        spots: [
+          { id: 'LC1', name: 'SVIP 1', x: 238, y: 74,  w: 84, h: 38, hint: 'top row, first couch after the stairs' },
+          { id: 'LC2', name: 'SVIP 2', x: 362, y: 74,  w: 84, h: 38, hint: 'top row, next to the Executive table' },
+          { id: 'LC3', name: 'SVIP 3', x: 238, y: 188, w: 84, h: 38, hint: 'bottom row, first couch after the stairs' },
+          { id: 'LC4', name: 'VIP 1',  x: 386, y: 188, w: 60, h: 38, hint: 'bottom row, next to the Executive table' },
+        ],
+      },
+      {
+        key: 'main', name: 'Main deck',
+        marks: [
+          { t: 'rect', x: 100, y: 112, w: 22, h: 76, label: 'BAR', rotate: true },
+          { t: 'oval', cx: 210, cy: 150, rx: 52, ry: 24, label: 'BEER PONG' },
+          { t: 'stairs', x: 332, y: 72 }, { t: 'stairs', x: 332, y: 228 },
+          { t: 'line', x1: 360, y1: 62, x2: 610, y2: 62 }, { t: 'line', x1: 360, y1: 238, x2: 610, y2: 238 },
+          { t: 'line', x1: 262, y1: 150, x2: 700, y2: 150 },
+          { t: 'rect', x: 690, y: 70, w: 50, h: 60, label: 'SOCIAL' }, { t: 'rect', x: 690, y: 170, w: 50, h: 60, label: 'LOUNGE' },
+        ],
+        spots: [
+          { id: 'DC1', name: 'VIP 3',   x: 128, y: 44,  w: 44, h: 34, hint: 'top corner beside the bar' },
+          { id: 'DC2', name: 'VIP 4',   x: 128, y: 222, w: 44, h: 34, hint: 'bottom corner beside the bar' },
+          { id: 'DT1', name: 'Table 1', x: 262, y: 48,  w: 30, h: 28, hint: 'top side, between the beer pong and the stairs' },
+          { id: 'DT2', name: 'Table 2', x: 262, y: 224, w: 30, h: 28, hint: 'bottom side, between the beer pong and the stairs' },
+          { id: 'LC5', name: 'SVIP 4',  x: 380, y: 76,  w: 70, h: 34, hint: 'top row, first couch past the stairs' },
+          { id: 'LC6', name: 'SVIP 5',  x: 488, y: 76,  w: 70, h: 34, hint: 'top row, second couch towards the front' },
+          { id: 'LC7', name: 'VIP 2',   x: 380, y: 188, w: 52, h: 34, hint: 'bottom row, first couch past the stairs' },
+        ],
+      },
+    ];
+    // In the POS dropdown but not on the published floor plans yet.
+    const UNPLACED = ['Table 3', 'Table 4'];
+
+    function spotByName(name) {
+      for (const d of DECKS) {
+        const sp = d.spots.find((x) => x.name === name);
+        if (sp) return { deck: d, spot: sp };
+      }
+      return null;
+    }
+
+    function deckSvg(deck, selectedName, interactive) {
+      const W = 960, H = 300;
+      let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${deck.name} map">`;
+      s += `<path d="${HULL}" fill="rgba(10,26,36,0.7)" stroke="rgba(242,234,221,0.35)" stroke-width="3"/>`;
+      s += `<text x="935" y="290" fill="#8AA0AD" font-family="monospace" font-size="13" text-anchor="end">FRONT →</text>`;
+      deck.marks.forEach((m) => {
+        if (m.t === 'line') s += `<line x1="${m.x1}" y1="${m.y1}" x2="${m.x2}" y2="${m.y2}" stroke="rgba(242,234,221,0.25)" stroke-width="3"/>`;
+        if (m.t === 'stairs') s += `<path d="M${m.x - 16},${m.y} a16,16 0 1,1 32,0" fill="none" stroke="#A0785A" stroke-width="7"/>`;
+        if (m.t === 'rect') {
+          s += `<rect x="${m.x}" y="${m.y}" width="${m.w}" height="${m.h}" rx="6" fill="rgba(138,160,173,0.25)" stroke="rgba(242,234,221,0.2)"/>`;
+          const cx = m.x + m.w / 2, cy = m.y + m.h / 2;
+          s += `<text x="${cx}" y="${cy}" fill="#8AA0AD" font-family="monospace" font-size="11" text-anchor="middle" dominant-baseline="middle"${m.rotate ? ` transform="rotate(90 ${cx} ${cy})"` : ''}>${m.label}</text>`;
+        }
+        if (m.t === 'oval') {
+          s += `<ellipse cx="${m.cx}" cy="${m.cy}" rx="${m.rx}" ry="${m.ry}" fill="rgba(94,60,40,0.75)"/>`;
+          s += `<text x="${m.cx}" y="${m.cy}" fill="#F2EADD" font-family="monospace" font-size="11" text-anchor="middle" dominant-baseline="middle"${m.ry > m.rx ? ` transform="rotate(90 ${m.cx} ${m.cy})"` : ''}>${m.label}</text>`;
+        }
+        if (m.t === 'text') s += `<text x="${m.x}" y="${m.y}" fill="#8AA0AD" font-family="monospace" font-size="12" text-anchor="middle" dominant-baseline="middle"${m.rotate ? ` transform="rotate(-90 ${m.x} ${m.y})"` : ''}>${m.label}</text>`;
+      });
+      deck.spots.forEach((sp) => {
+        const on = sp.name === selectedName;
+        const fill = on ? '#F5C518' : 'rgba(245,197,24,0.14)';
+        const stroke = on ? '#FFFFFF' : 'rgba(245,197,24,0.55)';
+        const txt = on ? '#0A1A24' : '#F5C518';
+        s += `<g ${interactive ? `data-pick="${sp.name}" style="cursor:pointer"` : ''}>`;
+        if (on) s += `<rect x="${sp.x - 8}" y="${sp.y - 8}" width="${sp.w + 16}" height="${sp.h + 16}" rx="12" fill="none" stroke="#F5C518" stroke-width="3" opacity="0.6"/>`;
+        s += `<rect x="${sp.x}" y="${sp.y}" width="${sp.w}" height="${sp.h}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="${on ? 3 : 2}"/>`;
+        s += `<text x="${sp.x + sp.w / 2}" y="${sp.y + sp.h / 2}" fill="${txt}" font-family="monospace" font-size="${sp.w < 50 ? 10 : 13}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${sp.name.replace('Table ', 'T')}</text>`;
+        s += '</g>';
+      });
+      return s + '</svg>';
+    }
+
+    // Mini map under the Table dropdown for the chosen table.
+    function renderTableMap() {
+      const name = $('table-select').value;
+      const el = $('table-map');
+      if (!name) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+      const found = spotByName(name);
+      el.classList.remove('hidden');
+      if (!found) {
+        el.innerHTML = `<div class="font-mono text-[11px] text-amber-300 px-1 py-1">${esc(name)} isn't on the floor plan yet — ask the floor manager where it is.</div>`;
+        return;
+      }
+      el.innerHTML = deckSvg(found.deck, name, false) +
+        `<div class="flex items-center justify-between gap-2 px-1 pt-1">
+          <div class="text-[12px] text-brand-ice"><span class="text-brand-gold font-bold">${esc(name)}</span> · ${esc(found.deck.name)} · ${esc(found.spot.hint)}</div>
+          <span class="font-mono text-[9px] tracking-widest uppercase text-brand-muted shrink-0">Full map</span>
+        </div>`;
+    }
+
+    function openMap() {
+      const selected = $('table-select').value;
+      $('map-decks').innerHTML = DECKS.map((d) => `
+        <div>
+          <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-2">${d.name}</div>
+          <div class="bg-brand-obsidian/60 border border-white/5 rounded-2xl p-2">${deckSvg(d, selected, true)}</div>
+        </div>`).join('');
+      $('map-unplaced').textContent = UNPLACED.join(' and ') + ' are not on the floor plan yet — pick them from the Table list.';
+      $('map-modal').classList.remove('hidden');
+    }
+    $('btn-map').addEventListener('click', openMap);
+    $('table-map').addEventListener('click', openMap);
+    $('map-close').addEventListener('click', () => $('map-modal').classList.add('hidden'));
+    $('map-modal').addEventListener('click', (e) => {
+      const g = e.target.closest('[data-pick]');
+      if (g) {
+        if (pendingGcashOrder) { $('map-modal').classList.add('hidden'); reopenPendingGcash(); return; }
+        $('table-select').value = g.getAttribute('data-pick');
+        saveTicket();
+        renderTableMap();
+        $('map-modal').classList.add('hidden');
+        showToast('Table: ' + g.getAttribute('data-pick'));
+        return;
+      }
+      if (e.target === $('map-modal')) $('map-modal').classList.add('hidden');
+    });
+    $('table-select').addEventListener('change', renderTableMap);
 
     // ---------------- RECENT ORDERS (this device) ----------------
     // Keeps the last orders sent from this POS and checks the bar for their status.
