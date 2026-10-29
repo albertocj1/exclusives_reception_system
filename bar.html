@@ -108,7 +108,7 @@
         </div>
 
         <!-- Clock & Logout (Top Right on Mobile) -->
-        <div class="flex items-center gap-2 md:gap-4 order-2 md:order-3 ml-auto md:ml-0">
+        <div class="flex items-center gap-2 md:gap-4 order-2 xl:order-3 ml-auto xl:ml-0">
           <button id="sound-btn" type="button" class="font-mono text-[9px] md:text-[11px] tracking-widest uppercase border border-white/10 text-brand-muted rounded-full px-3 py-1.5 md:px-4 md:py-2 transition-colors">Sound off</button>
           <div class="flex flex-col items-end leading-tight">
             <div class="flex items-center gap-1.5 md:gap-2 font-mono text-[10px] md:text-sm text-brand-gold">
@@ -121,7 +121,7 @@
         </div>
 
         <!-- Scrollable Tabs (Bottom Row on Mobile, Center on Desktop) -->
-        <div class="flex w-full md:w-auto md:flex-1 justify-start md:justify-center gap-2 md:gap-3 overflow-x-auto no-scrollbar order-3 md:order-2 pt-1 md:pt-0">
+        <div class="flex w-full xl:w-auto xl:flex-1 justify-start xl:justify-center gap-2 md:gap-3 overflow-x-auto no-scrollbar order-3 xl:order-2 pt-1 xl:pt-0">
           <button data-tab="sent" class="status-tab active font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-brand-gold bg-brand-goldDim/20 text-brand-gold transition-colors whitespace-nowrap shrink-0">
             Sent <span id="count-sent" class="ml-1 opacity-80">(0)</span>
           </button>
@@ -711,7 +711,7 @@
           <div class="flex items-center justify-between gap-2 text-[11px] py-1">
             <span class="text-brand-muted">${new Date(c.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
             <span class="flex-1 text-brand-ice truncate">${c.qty > 1 ? c.qty + '× ' : ''}${esc(c.item_type === 'drink' ? 'Cocktail' + (c.qty > 1 ? 's' : '') : (c.item_name || TYPE_LABEL[c.item_type]))}${c.item_type === 'can' && c.item_name ? ' (can)' : ''}${c.guest_name ? ' \u00b7 ' + esc(c.guest_name) : ''}</span>
-            <button data-undo="${esc(c.claim_id)}" data-who="${esc(spotOf(b) + ' · ' + b.full_name)}" data-what="${esc((c.qty > 1 ? c.qty + '× ' : '') + (c.item_name || TYPE_LABEL[c.item_type]))}" class="font-mono text-[10px] uppercase tracking-widest text-red-300 hover:text-red-200">Undo</button>
+            <button data-undo="${esc(c.claim_id)}" data-who="${esc(spotOf(b) + ' · ' + b.full_name)}" data-what="${esc((c.qty > 1 ? c.qty + '× ' : '') + (c.item_name || TYPE_LABEL[c.item_type]))}" class="font-mono text-[10px] uppercase tracking-widest text-red-300 hover:text-red-200 border border-red-400/30 rounded-lg px-3 py-2">Undo</button>
           </div>`).join('');
         const done = leftTotal(b) === 0;
         return `<div class="bg-brand-slate border ${b.checked_in ? (done ? 'border-white/10' : 'border-cyan-400/40') : 'border-white/10'} rounded-2xl p-4 md:p-5 ${done ? 'opacity-70' : ''}">
