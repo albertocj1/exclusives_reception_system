@@ -567,8 +567,8 @@
         const left = stock[it.id];
         const soldOut = left === 0;
         return `
-        <button data-add="${it.id}" ${soldOut ? 'disabled' : ''}
-          class="tap-target group relative text-left bg-brand-slate border ${inCart ? 'border-brand-gold/60' : 'border-white/5'} ${soldOut ? 'opacity-40 cursor-not-allowed' : 'hover:border-brand-gold/50 active:scale-[0.98]'} rounded-xl md:rounded-2xl p-3 md:p-4 transition flex flex-col justify-between min-h-[90px] md:min-h-[112px] shadow-sm">
+        <button data-add="${it.id}"
+          class="tap-target group relative text-left bg-brand-slate border ${inCart ? 'border-brand-gold/60' : soldOut ? 'border-red-400/30' : 'border-white/5'} hover:border-brand-gold/50 active:scale-[0.98] rounded-xl md:rounded-2xl p-3 md:p-4 transition flex flex-col justify-between min-h-[90px] md:min-h-[112px] shadow-sm">
           ${inCart ? `<span class="absolute top-2 right-2 font-mono text-[10px] bg-brand-gold text-brand-obsidian rounded-full px-2 py-0.5 font-bold">${inCart.qty}</span>` : ''}
           <div>
             <div class="text-xs md:text-sm text-brand-ice leading-tight pr-6">${esc(it.name)}</div>
@@ -577,7 +577,7 @@
           <div class="flex items-center justify-between mt-2 md:mt-3">
             <span class="font-mono text-brand-gold text-xs md:text-sm">${peso(it.price)}</span>
             ${soldOut
-              ? '<span class="font-mono text-[9px] md:text-[10px] tracking-widest uppercase text-red-300">Sold out</span>'
+              ? '<span class="font-mono text-[9px] md:text-[10px] tracking-widest uppercase text-red-300">Out of stock</span>'
               : left != null && left <= LOW_STOCK_SHOW
                 ? `<span class="font-mono text-[9px] md:text-[10px] tracking-widest uppercase text-amber-300">${left} left</span>`
                 : '<span class="font-mono text-[9px] md:text-[10px] tracking-widest uppercase text-brand-muted group-hover:text-brand-gold transition-colors">+ Add</span>'}
@@ -604,10 +604,6 @@
       const menuItem = findMenuItem(id);
       if (!menuItem) return;
       const line = cart.find((l) => l.id === id);
-      if (stock[id] != null && (line ? line.qty : 0) >= stock[id]) {
-        showToast(stock[id] ? 'Only ' + stock[id] + ' ' + menuItem.name + ' left' : menuItem.name + ' is sold out', 'error');
-        return;
-      }
       if (line) line.qty = Math.min(50, line.qty + 1);
       else cart.push({ id: menuItem.id, name: menuItem.name, desc: menuItem.desc || '', price: menuItem.price, qty: 1 });
       renderCart();
@@ -618,10 +614,6 @@
       if (pendingGcashOrder) { reopenPendingGcash(); return; }
       const line = cart.find((l) => l.id === id);
       if (!line) return;
-      if (delta > 0 && stock[id] != null && line.qty >= stock[id]) {
-        showToast('Only ' + stock[id] + ' ' + line.name + ' left', 'error');
-        return;
-      }
       line.qty = Math.min(50, line.qty + delta);
       if (line.qty <= 0) cart = cart.filter((l) => l.id !== id);
       renderCart();
@@ -776,7 +768,7 @@
       } catch (e) {
         if (e.isAuth) { $('cash-modal').classList.add('hidden'); return; }
         $('cash-error').textContent = e.message + ' Not sent — try again.';
-        if (/out of stock/i.test(e.message)) fetchStock();
+       
         $('cash-error').classList.remove('hidden');
       } finally {
         sending = false; btn.textContent = 'Confirm & send to bar'; updateChange();
@@ -842,7 +834,7 @@
         orderSent(order, 'GCash (no photo)');
       } catch (e) {
         if (e.isAuth) { $('gcash-modal').classList.add('hidden'); return; }
-        gcashError(e.message + ' Not sent — try again.'); if (/out of stock/i.test(e.message)) fetchStock();
+        gcashError(e.message + ' Not sent — try again.');
       } finally {
         gcashBusy('');
       }
@@ -908,7 +900,7 @@
           $('btn-camera').textContent = '📸 Retake receipt photo';
           $('btn-gcash-nophoto').textContent = 'Finish without photo';
         } else {
-          gcashError(err.message + ' Nothing was sent — try again.'); if (/out of stock/i.test(err.message)) fetchStock();
+          gcashError(err.message + ' Nothing was sent — try again.');
         }
       } finally {
         gcashBusy('');
