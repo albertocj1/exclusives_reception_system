@@ -632,6 +632,8 @@
       compsFetching = true;
       try {
         comps = await apiFetch('/api/comps');
+        // Entrance tickets carry no complimentary items, so they never show in this tab.
+        if (comps && Array.isArray(comps.bookings)) comps.bookings = comps.bookings.filter((b) => b.package !== 'Entrance Fee');
         compsError = '';
       } catch (err) {
         if (!err.isAuth) compsError = err.message;
