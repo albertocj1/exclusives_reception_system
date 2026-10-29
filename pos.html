@@ -913,9 +913,24 @@
           { id: 'LC7', name: 'VIP 2',   x: 380, y: 188, w: 52, h: 34, hint: 'bottom row, first couch past the stairs' },
         ],
       },
+      {
+        key: 'sky', name: 'Sky deck',
+        marks: [
+          { t: 'rect', x: 92, y: 110, w: 30, h: 80, label: 'DJ BOOTH', rotate: true },
+          { t: 'text', x: 190, y: 150, label: 'DANCE FLOOR', rotate: true },
+          { t: 'line', x1: 245, y1: 52, x2: 245, y2: 112 }, { t: 'line', x1: 245, y1: 188, x2: 245, y2: 248 },
+          { t: 'rect', x: 290, y: 116, w: 64, h: 68, label: 'JACUZZI' },
+          { t: 'rect', x: 410, y: 106, w: 90, h: 88, label: 'OPEN LOUNGE' },
+          { t: 'rect', x: 570, y: 84, w: 50, h: 132, label: 'STAIRS', rotate: true },
+        ],
+        spots: [
+          { id: 'DT3', name: 'Table 3', x: 175, y: 48,  w: 30, h: 28, hint: 'top side of the dance floor, near the DJ booth' },
+          { id: 'DT4', name: 'Table 4', x: 175, y: 224, w: 30, h: 28, hint: 'bottom side of the dance floor, near the DJ booth' },
+        ],
+      },
     ];
-    // In the POS dropdown but not on the published floor plans yet.
-    const UNPLACED = ['Table 3', 'Table 4'];
+    // In the POS dropdown but not on the floor plans (none at the moment).
+    const UNPLACED = [];
 
     function spotByName(name) {
       for (const d of DECKS) {
@@ -983,7 +998,7 @@
           <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-2">${d.name}</div>
           <div class="bg-brand-obsidian/60 border border-white/5 rounded-2xl p-2">${deckSvg(d, selected, true)}</div>
         </div>`).join('');
-      $('map-unplaced').textContent = UNPLACED.join(' and ') + ' are not on the floor plan yet — pick them from the Table list.';
+      $('map-unplaced').textContent = UNPLACED.length ? UNPLACED.join(' and ') + ' are not on the floor plan yet — pick them from the Table list.' : '';
       $('map-modal').classList.remove('hidden');
     }
     $('btn-map').addEventListener('click', openMap);
