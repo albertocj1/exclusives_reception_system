@@ -52,6 +52,8 @@
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
     button, .tap-target { -webkit-tap-highlight-color: transparent; }
+    /* Keep the table sketch small so Pay stays in view on tablets in portrait. */
+    #table-map svg { max-height: 130px; }
   </style>
 </head>
 <body class="bg-brand-obsidian text-brand-ice font-sans antialiased min-h-screen">
@@ -218,7 +220,7 @@
 
         <div id="cart-lines" class="flex-1 min-h-[120px] space-y-3 hidden overflow-y-auto pr-1"></div>
 
-        <div id="ticket-totals" class="ticket-tear pt-4 mt-auto hidden shrink-0">
+        <div id="ticket-totals" class="ticket-tear pt-4 mt-auto hidden shrink-0 sticky bottom-0 z-10 bg-brand-obsidian lg:static lg:bg-transparent pb-1">
           <div class="flex items-center justify-between text-sm md:text-base pt-2 md:pt-3">
             <span class="font-serif text-brand-ice">Total</span>
             <span id="total" class="font-mono text-brand-gold text-lg md:text-xl font-bold">₱0</span>
@@ -606,9 +608,9 @@
             <div class="font-mono text-[10px] md:text-xs text-brand-muted truncate">${l.desc ? esc(l.desc) + ' &middot; ' : ''}${peso(l.price)} each</div>
           </div>
           <div class="flex items-center gap-1.5 md:gap-2">
-            <button data-dec="${l.id}" aria-label="One fewer" class="tap-target w-8 h-8 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-sm leading-none">&minus;</button>
+            <button data-dec="${l.id}" aria-label="One fewer" class="tap-target w-10 h-10 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-base leading-none">&minus;</button>
             <span class="font-mono text-xs md:text-sm w-5 text-center">${l.qty}</span>
-            <button data-inc="${l.id}" aria-label="One more" class="tap-target w-8 h-8 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-sm leading-none">+</button>
+            <button data-inc="${l.id}" aria-label="One more" class="tap-target w-10 h-10 rounded-full border border-white/10 text-brand-ice hover:border-brand-gold hover:text-brand-gold flex items-center justify-center text-base leading-none">+</button>
           </div>
           <div class="font-mono text-xs md:text-sm text-brand-gold w-16 text-right">${peso(l.price * l.qty)}</div>
           <button data-remove="${l.id}" aria-label="Remove" class="tap-target text-brand-muted hover:text-red-300 text-lg leading-none px-1">&times;</button>
