@@ -204,6 +204,10 @@
           <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-3">Main Deck</div>
           <div id="deck-main" class="bg-brand-slate border border-white/5 rounded-3xl p-3 md:p-5"></div>
         </div>
+        <div>
+          <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-3">Sky Deck</div>
+          <div id="deck-sky" class="bg-brand-slate border border-white/5 rounded-3xl p-3 md:p-5"></div>
+        </div>
         <div id="deck-other-wrap" class="hidden">
           <div class="font-mono text-[11px] tracking-[0.25em] text-brand-gold uppercase mb-3">Other Tables</div>
           <div id="deck-other" class="bg-brand-slate border border-white/5 rounded-3xl p-3 md:p-5 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
@@ -1144,6 +1148,18 @@
           { id: 'LC6', x: 720, y: 95,  w: 130, h: 70 },
           { id: 'LC7', x: 500, y: 200, w: 130, h: 70 }
         ]
+      },
+      sky: {
+        fixtures: [
+          { x: 60,  y: 110, w: 45,  h: 120, label: 'DJ',          fill: 'rgba(138,160,173,0.18)' },
+          { x: 130, y: 120, w: 120, h: 100, label: 'DANCE FLOOR', fill: 'rgba(138,160,173,0.10)' },
+          { x: 330, y: 120, w: 100, h: 100, label: 'JACUZZI',     fill: 'rgba(80,140,170,0.30)' },
+          { x: 500, y: 115, w: 130, h: 110, label: 'OPEN LOUNGE', fill: 'rgba(138,160,173,0.18)' }
+        ],
+        spots: [
+          { id: 'DT3', x: 155, y: 40,  w: 70, h: 55, kind: 'cocktail' },
+          { id: 'DT4', x: 155, y: 250, w: 70, h: 55, kind: 'cocktail' }
+        ]
       }
     };
 
@@ -1198,6 +1214,7 @@
       tables.forEach(function (t) { byId[String(t.id).toUpperCase()] = t; });
       $('deck-lower').innerHTML = drawDeck('lower', byId);
       $('deck-main').innerHTML  = drawDeck('main', byId);
+      $('deck-sky').innerHTML   = drawDeck('sky', byId);
 
       // Any table the deck drawings don't place (e.g. Table 3 / Table 4) still gets a tile.
       var placed = {};
