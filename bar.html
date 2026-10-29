@@ -134,6 +134,9 @@
           <button data-tab="comps" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 md:ml-4">
             Complimentary
           </button>
+          <button data-tab="inventory" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
+            Inventory <span id="count-low" class="ml-1 text-amber-300"></span>
+          </button>
           <button data-tab="dashboard" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 md:ml-4">
             Dashboard
           </button>
@@ -185,6 +188,23 @@
           </div>
           <div id="comps-message" class="hidden text-center text-brand-muted text-sm py-16"></div>
           <div id="comps-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 items-start"></div>
+        </div>
+
+        <!-- Inventory -->
+        <div id="inventory-view" class="hidden max-w-6xl mx-auto">
+          <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-4 md:mb-6">
+            <div>
+              <h2 class="font-serif text-2xl md:text-3xl text-brand-ice">Inventory</h2>
+              <p class="text-brand-muted text-xs mt-1">On hand = last count + restocks &minus; sold on the POS &minus; complimentary given &minus; bottles opened for shots.</p>
+            </div>
+            <button id="inv-refresh" type="button" class="self-start sm:self-auto font-mono text-[10px] tracking-widest uppercase text-brand-muted hover:text-brand-ice border border-white/10 rounded-full px-4 py-2">Refresh</button>
+          </div>
+          <div id="inv-message" class="hidden text-center text-brand-muted text-sm py-16"></div>
+          <div id="inv-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 items-start"></div>
+          <div class="mt-6 md:mt-8 bg-brand-slate border border-white/10 rounded-2xl p-4 md:p-5">
+            <div class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-2">Recent counts, restocks &amp; opened bottles</div>
+            <div id="inv-moves" class="text-sm"></div>
+          </div>
         </div>
 
         <div id="dashboard-view" class="hidden flex flex-col gap-4 md:gap-6 max-w-6xl mx-auto">
@@ -284,6 +304,28 @@
       </div>
       <div id="give-options" class="grid gap-2"></div>
       <p id="give-error" class="hidden text-red-300 font-mono text-xs mt-3 text-center"></p>
+    </div>
+  </div>
+
+  <!-- Inventory change -->
+  <div id="inv-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
+    <div class="bg-brand-slate border border-brand-gold/30 rounded-t-3xl sm:rounded-3xl p-6 w-full sm:max-w-md shadow-2xl">
+      <div class="flex items-start justify-between mb-1">
+        <h3 id="inv-title" class="font-serif text-2xl text-brand-ice">Restock</h3>
+        <button id="inv-close" aria-label="Close" class="text-brand-muted hover:text-brand-ice text-3xl leading-none px-2">&times;</button>
+      </div>
+      <p id="inv-sub" class="text-brand-muted text-xs mb-5"></p>
+      <div class="font-mono text-[10px] tracking-widest uppercase text-brand-muted mb-2 text-center" id="inv-qty-label">How many</div>
+      <div class="flex items-center justify-center gap-4 mb-4">
+        <button id="inv-minus" type="button" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none">&minus;</button>
+        <input id="inv-qty" type="number" inputmode="numeric" min="0" class="w-28 bg-transparent text-center font-serif text-5xl text-brand-gold outline-none border-b border-white/10 focus:border-brand-gold">
+        <button id="inv-plus" type="button" class="w-14 h-14 rounded-full border border-white/15 text-brand-ice text-3xl leading-none">+</button>
+      </div>
+      <input id="inv-note" type="text" maxlength="120" placeholder="Note (optional) &mdash; e.g. broken, delivery from supplier"
+             class="w-full bg-brand-obsidian border border-white/10 rounded-xl focus:border-brand-gold text-brand-ice text-sm px-4 py-3 outline-none mb-4">
+      <p id="inv-preview" class="text-center text-sm text-brand-ice mb-4"></p>
+      <button id="inv-save" type="button" class="w-full font-mono text-[11px] tracking-widest uppercase rounded-xl px-4 py-4 bg-brand-gold text-brand-obsidian font-bold disabled:opacity-40">Save</button>
+      <p id="inv-error" class="hidden text-red-300 font-mono text-xs mt-3 text-center"></p>
     </div>
   </div>
 
@@ -513,6 +555,7 @@
         renderView();
         if (activeTab === 'comps') fetchComps();
         if (activeTab === 'dashboard') fetchCompClaims();
+        fetchInventory();
       } catch (err) {
         if (!err.isAuth) lastError = err.message;
       } finally {
@@ -588,9 +631,16 @@
     $('order-search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; searchTerm = ''; renderView(); } });
 
     function renderView() {
-      $('search-wrap').classList.toggle('hidden', activeTab === 'dashboard' || activeTab === 'comps');
+      $('search-wrap').classList.toggle('hidden', activeTab === 'dashboard' || activeTab === 'comps' || activeTab === 'inventory');
       $('comps-view').classList.toggle('hidden', activeTab !== 'comps');
-      if (activeTab === 'comps') {
+      $('inventory-view').classList.toggle('hidden', activeTab !== 'inventory');
+      if (activeTab === 'inventory') {
+        $('orders-grid').classList.add('hidden');
+        $('empty-state').classList.add('hidden');
+        $('dashboard-view').classList.add('hidden');
+        $('dashboard-view').classList.remove('flex');
+        renderInventory();
+      } else if (activeTab === 'comps') {
         $('orders-grid').classList.add('hidden');
         $('empty-state').classList.add('hidden');
         $('dashboard-view').classList.add('hidden');
@@ -800,7 +850,7 @@
         return `<button type="button" data-opt="${esc(o)}" class="w-full text-left rounded-xl px-4 py-4 border ${isPick ? 'border-cyan-400 bg-cyan-400/15 text-cyan-100' : 'border-white/10 text-brand-ice hover:border-brand-gold'} transition-colors">
           <span class="text-base">${esc(o)}</span>${isPick ? '<span class="float-right font-mono text-[10px] tracking-widest uppercase text-cyan-300">Their pick</span>' : ''}
         </button>`;
-      }).join('') + (type === 'can' ? '<button type="button" data-opt="" class="w-full rounded-xl px-4 py-4 border border-white/10 text-brand-muted hover:border-brand-gold">Mixed / any</button>' : '');
+      }).join('');
       $('give-modal').classList.remove('hidden');
     }
     function closeGive() { giving = null; $('give-modal').classList.add('hidden'); }
@@ -893,6 +943,155 @@
       };
       el.innerHTML = block('bottle', 'Bottles') + block('food', 'Food') + block('can', 'Cans') + block('drink', 'Cocktails');
     }
+
+    // ---------------- INVENTORY ----------------
+    // Stock is worked out by the backend; this tab records counts, restocks, removals
+    // and bottles opened for shots.
+    let inventory = null;          // { items, menu_available, moves } from /api/inventory
+    let inventoryError = '';
+    let inventoryFetching = false;
+
+    async function fetchInventory() {
+      if (inventoryFetching || !appVisible) return;
+      inventoryFetching = true;
+      try {
+        inventory = await apiFetch('/api/inventory');
+        inventoryError = '';
+      } catch (err) {
+        if (!err.isAuth) inventoryError = err.message;
+      } finally {
+        inventoryFetching = false;
+        renderLowBadge();
+        if (activeTab === 'inventory') renderInventory();
+      }
+    }
+
+    const unitWord = (it, n) => (it.unit === 'can' ? 'can' : 'bottle') + (n === 1 ? '' : 's');
+    const stockTone = (it) => !it.counted ? 'muted' : it.on_hand <= 0 ? 'out' : it.on_hand <= it.low_at ? 'low' : 'ok';
+
+    function renderLowBadge() {
+      const n = inventory ? inventory.items.filter((i) => ['out', 'low'].indexOf(stockTone(i)) !== -1).length : 0;
+      $('count-low').textContent = n ? '(' + n + ' low)' : '';
+    }
+
+    function renderInventory() {
+      const msg = $('inv-message');
+      if (!inventory) {
+        msg.textContent = inventoryError ? 'Cannot load inventory: ' + inventoryError : 'Loading…';
+        msg.classList.remove('hidden'); $('inv-grid').innerHTML = ''; $('inv-moves').innerHTML = '';
+        return;
+      }
+      msg.classList.add('hidden');
+      const when = (iso) => new Date(iso).toLocaleString('en-PH', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      $('inv-grid').innerHTML = inventory.items.map((it) => {
+        const tone = stockTone(it);
+        const border = { out: 'border-red-500/60', low: 'border-amber-400/60', ok: 'border-white/10', muted: 'border-white/10' }[tone];
+        const numCls = { out: 'text-red-300', low: 'text-amber-300', ok: 'text-brand-gold', muted: 'text-brand-muted' }[tone];
+        const badge = tone === 'out' ? '<span class="font-mono text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-red-500/60 text-red-300">Out</span>'
+          : tone === 'low' ? '<span class="font-mono text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-amber-400/60 text-amber-300">Low</span>'
+          : tone === 'muted' ? '<span class="font-mono text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-white/20 text-brand-muted">Not counted</span>' : '';
+        const parts = [];
+        if (it.counted) parts.push('Counted ' + it.count + ' · ' + when(it.counted_at));
+        if (it.restocked) parts.push('+' + it.restocked + ' restocked');
+        if (it.adjusted) parts.push((it.adjusted > 0 ? '+' : '') + it.adjusted + ' adjusted');
+        if (it.sold) parts.push(it.sold + ' sold');
+        if (it.comp) parts.push(it.comp + ' complimentary');
+        if (it.opened) parts.push(it.opened + ' opened for shots');
+        const btn = (act, label, cls) => `<button type="button" data-inv="${act}" data-key="${it.key}" class="font-mono text-[10px] tracking-widest uppercase rounded-xl px-3 py-3 border ${cls}">${label}</button>`;
+        return `<div class="bg-brand-slate border ${border} rounded-2xl p-4 md:p-5">
+          <div class="flex items-start justify-between gap-2">
+            <div class="text-brand-ice text-sm md:text-base leading-tight">${esc(it.name)}</div>
+            ${badge}
+          </div>
+          <div class="flex items-baseline gap-2 mt-2">
+            <span class="font-serif text-5xl ${numCls}">${it.counted ? it.on_hand : '—'}</span>
+            <span class="font-mono text-[10px] tracking-widest uppercase text-brand-muted">${unitWord(it, it.on_hand)} on hand</span>
+          </div>
+          <div class="text-[11px] text-brand-muted mt-2 leading-relaxed min-h-[2.5em]">${esc(parts.join(' · '))}</div>
+          <div class="grid ${it.pour ? 'grid-cols-2' : 'grid-cols-3'} gap-2 mt-3">
+            ${it.pour ? btn('open', 'Open for shots', 'border-cyan-400/50 text-cyan-200 bg-cyan-400/10 hover:bg-cyan-400/20 col-span-2') : ''}
+            ${btn('restock', 'Restock', 'border-emerald-400/40 text-emerald-300 hover:bg-emerald-400/10')}
+            ${btn('remove', 'Remove', 'border-red-400/30 text-red-300 hover:bg-red-400/10')}
+            ${btn('count', 'Count', 'border-white/15 text-brand-ice hover:border-brand-gold' + (it.pour ? ' col-span-2' : ''))}
+          </div>
+        </div>`;
+      }).join('');
+
+      const kindLabel = { count: 'Counted', restock: 'Restocked', open: 'Opened for shots', adjust: 'Adjusted' };
+      const moves = inventory.moves || [];
+      $('inv-moves').innerHTML = moves.length ? moves.slice(0, 25).map((m) => {
+        const qty = m.kind === 'count' ? '= ' + m.qty : m.kind === 'open' ? '−' + m.qty : (m.qty > 0 ? '+' : '−') + Math.abs(m.qty);
+        return `<div class="flex items-center gap-3 py-1.5 border-b border-white/5 last:border-0 text-[12px]">
+          <span class="text-brand-muted w-28 shrink-0">${esc(when(m.created_at))}</span>
+          <span class="flex-1 text-brand-ice truncate">${esc(kindLabel[m.kind] || m.kind)} · ${esc(m.name)}${m.note ? ' · <span class="text-brand-muted">' + esc(m.note) + '</span>' : ''}</span>
+          <span class="font-mono text-brand-gold shrink-0">${qty}</span>
+          <span class="text-brand-muted text-[10px] truncate max-w-[9rem] hidden sm:inline">${esc(m.by_email || '')}</span>
+        </div>`;
+      }).join('') : '<div class="text-brand-muted text-[12px]">Nothing yet.</div>';
+    }
+
+    // ---- change stock ----
+    let invEdit = null;   // { item, act }
+    const INV_ACTS = {
+      open:    { title: 'Open for shots', label: 'Bottles opened', kind: 'open',    start: 1, sub: 'Takes a bottle off the shelf to pour shots from.' },
+      restock: { title: 'Restock',        label: 'How many came in', kind: 'restock', start: 1, sub: 'Adds to what is on hand.' },
+      remove:  { title: 'Remove',         label: 'How many to remove', kind: 'adjust', start: 1, sub: 'Broken, spilled or missing. Add a note.' },
+      count:   { title: 'Count',          label: 'How many are on the shelf now', kind: 'count', start: null, sub: 'Replaces the stock with what you counted. Sales and complimentary from now on are taken off this number.' },
+    };
+    function invQty() { const n = parseInt($('inv-qty').value, 10); return isNaN(n) ? 0 : n; }
+    function invPreview() {
+      if (!invEdit) return;
+      const it = invEdit.item, q = invQty(), a = invEdit.act;
+      const next = a === 'count' ? q : a === 'restock' ? it.on_hand + q : it.on_hand - q;
+      $('inv-preview').innerHTML = esc(it.name) + ': <span class="font-mono">' + it.on_hand + '</span> → <span class="font-mono text-brand-gold">' + next + '</span> ' + unitWord(it, next);
+      $('inv-save').disabled = a === 'count' ? q < 0 : q < 1;
+    }
+    function openInv(key, act) {
+      const it = inventory && inventory.items.find((i) => i.key === key);
+      if (!it) return;
+      const cfg = INV_ACTS[act];
+      invEdit = { item: it, act };
+      $('inv-title').textContent = cfg.title + ' — ' + it.name;
+      $('inv-sub').textContent = cfg.sub;
+      $('inv-qty-label').textContent = cfg.label;
+      $('inv-qty').value = cfg.start == null ? Math.max(0, it.on_hand) : cfg.start;
+      $('inv-note').value = '';
+      $('inv-note').classList.toggle('hidden', act === 'open');
+      $('inv-error').classList.add('hidden');
+      $('inv-save').textContent = 'Save';
+      invPreview();
+      $('inv-modal').classList.remove('hidden');
+    }
+    function closeInv() { invEdit = null; $('inv-modal').classList.add('hidden'); }
+    $('inv-grid').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-inv]');
+      if (b) openInv(b.getAttribute('data-key'), b.getAttribute('data-inv'));
+    });
+    $('inv-close').addEventListener('click', closeInv);
+    $('inv-modal').addEventListener('click', (e) => { if (e.target === $('inv-modal')) closeInv(); });
+    $('inv-minus').addEventListener('click', () => { $('inv-qty').value = Math.max(0, invQty() - 1); invPreview(); });
+    $('inv-plus').addEventListener('click', () => { $('inv-qty').value = invQty() + 1; invPreview(); });
+    $('inv-qty').addEventListener('input', invPreview);
+    $('inv-refresh').addEventListener('click', fetchInventory);
+    $('inv-save').addEventListener('click', async () => {
+      if (!invEdit) return;
+      const ed = invEdit, cfg = INV_ACTS[ed.act], q = invQty();
+      const qty = ed.act === 'remove' ? -q : q;
+      $('inv-save').disabled = true; $('inv-save').textContent = 'Saving…';
+      try {
+        inventory = await apiFetch('/api/inventory/moves', 'POST', { item: ed.item.key, kind: cfg.kind, qty, note: $('inv-note').value.trim() || null });
+        closeInv();
+        renderLowBadge();
+        renderInventory();
+        const now = inventory.items.find((i) => i.key === ed.item.key);
+        showToast(cfg.title + ': ' + ed.item.name + (now ? ' · ' + now.on_hand + ' on hand' : ''));
+      } catch (err) {
+        if (err.isAuth) return;
+        $('inv-error').textContent = err.message;
+        $('inv-error').classList.remove('hidden');
+        $('inv-save').disabled = false; $('inv-save').textContent = 'Save';
+      }
+    });
 
     // ---------------- DASHBOARD ----------------
     // Tables in the POS dropdown. table_name is "SVIP 1", "SVIP 1 · Ana", "Ana" (walk-in) or empty.
@@ -1087,6 +1286,13 @@
         add(orderRows, 'Orders', [8, 20, 12, 16, 50, 12, 9, 10, 40, 30]);
         add(tableRows, 'Per table', [14, 30, 14, 12, 12, 18, 14, 14]);
         add(itemRows, 'Items', [32, 12, 14]);
+        try {
+          const inv = await apiFetch('/api/inventory');
+          add([['Item', 'On hand', 'Unit', 'Last count', 'Counted at', 'Restocked', 'Adjusted', 'Sold (POS)', 'Complimentary', 'Opened for shots']].concat(inv.items.map((i) => [
+            i.name, i.counted ? i.on_hand : '', i.unit, i.counted ? i.count : 'Not counted', i.counted_at ? when(i.counted_at) : '',
+            i.restocked, i.adjusted, i.sold, i.comp, i.opened,
+          ])), 'Inventory', [28, 10, 8, 12, 20, 11, 10, 11, 14, 16]);
+        } catch (e) { if (e.isAuth) throw e; }
         // One row per "give" (e.g. 4 cans at once), not per can.
         const gives = [];
         const byClaim = {};
@@ -1256,6 +1462,7 @@
         renderView();
         if (activeTab === 'comps') fetchComps();
         if (activeTab === 'dashboard') fetchCompClaims();
+        if (activeTab === 'inventory') fetchInventory();
       });
     });
 
