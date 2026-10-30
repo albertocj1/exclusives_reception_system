@@ -121,23 +121,23 @@
         </div>
 
         <!-- Scrollable Tabs (Bottom Row on Mobile, Center on Desktop) -->
-        <div class="flex w-full xl:w-auto xl:flex-1 justify-start xl:justify-center gap-2 md:gap-3 overflow-x-auto no-scrollbar order-3 xl:order-2 pt-1 xl:pt-0">
-          <button data-tab="sent" class="status-tab active font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-brand-gold bg-brand-goldDim/20 text-brand-gold transition-colors whitespace-nowrap shrink-0">
+        <div class="flex w-full xl:w-auto xl:flex-1 justify-start md:justify-center md:flex-wrap gap-2 overflow-x-auto md:overflow-visible no-scrollbar order-3 xl:order-2 pt-1 xl:pt-0">
+          <button data-tab="sent" class="status-tab active font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 lg:px-5 py-2.5 border border-brand-gold bg-brand-goldDim/20 text-brand-gold transition-colors whitespace-nowrap shrink-0">
             Sent <span id="count-sent" class="ml-1 opacity-80">(0)</span>
           </button>
-          <button data-tab="fulfilled" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
+          <button data-tab="fulfilled" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 lg:px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
             Fulfilled
           </button>
-          <button data-tab="cancelled" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
+          <button data-tab="cancelled" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 lg:px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
             Cancelled
           </button>
-          <button data-tab="comps" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 md:ml-4">
+          <button data-tab="comps" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 lg:px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 lg:ml-3">
             Complimentary
           </button>
-          <button data-tab="inventory" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
+          <button data-tab="inventory" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 lg:px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0">
             Inventory <span id="count-low" class="ml-1 text-amber-300"></span>
           </button>
-          <button data-tab="dashboard" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 md:px-5 py-2 md:py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 md:ml-4">
+          <button data-tab="dashboard" class="status-tab font-mono text-[10px] md:text-[11px] tracking-widest uppercase rounded-full px-4 lg:px-5 py-2.5 border border-white/10 text-brand-muted hover:text-brand-ice hover:border-white/20 transition-colors whitespace-nowrap shrink-0 ml-1 lg:ml-3">
             Dashboard
           </button>
         </div>
