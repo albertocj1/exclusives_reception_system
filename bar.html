@@ -682,8 +682,6 @@
       compsFetching = true;
       try {
         comps = await apiFetch('/api/comps');
-        // Entrance tickets carry no complimentary items, so they never show in this tab.
-        if (comps && Array.isArray(comps.bookings)) comps.bookings = comps.bookings.filter((b) => b.package !== 'Entrance Fee');
         compsError = '';
       } catch (err) {
         if (!err.isAuth) compsError = err.message;
@@ -785,7 +783,7 @@
       }).join('');
     }
 
-    // One line per checked-in guest with their own cocktails (6-Pax bundle, names ticked at check-in).
+    // One line per checked-in guest with their own cocktails (Entrance / 6-Pax, names ticked at check-in).
     function peopleRows(b) {
       const q = fold(compsQuery.trim());
       const t = (iso) => new Date(iso).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
