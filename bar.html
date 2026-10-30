@@ -783,7 +783,7 @@
       }).join('');
     }
 
-    // One line per checked-in guest with their own cocktails (Entrance, names ticked at check-in).
+    // One line per checked-in guest with their own cocktails (Entrance / 6-Pax, names ticked at check-in).
     function peopleRows(b) {
       const q = fold(compsQuery.trim());
       const t = (iso) => new Date(iso).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
@@ -939,7 +939,7 @@
           <div class="text-right text-xs text-brand-muted">${entries.map(([n, q]) => esc(n) + ' ×' + q).join('<br>')}</div>
         </div>`;
       };
-      el.innerHTML = block('bottle', 'Bottles') + block('food', 'Food') + block('can', 'Cans') + block('drink', 'Cocktails (entrance)');
+      el.innerHTML = block('bottle', 'Bottles') + block('food', 'Food') + block('can', 'Cans') + block('drink', 'Cocktails');
     }
 
     // ---------------- INVENTORY ----------------
